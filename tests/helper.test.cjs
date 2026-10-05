@@ -197,6 +197,34 @@ test("the helper carries the marker uninstall.sh looks for", () => {
   assert.match(source, /lenovo-power-conservation: installed by/);
 });
 
+test("the privileged files name where they came from", () => {
+  // These two are the only files that land outside the repository: the helper
+  // in /usr/local/libexec, the rules example in /etc/polkit-1/rules.d. Once
+  // installed, nothing about either tells a sysadmin where to find the source,
+  // so both have to say so themselves.
+  //
+  // install.sh and uninstall.sh are deliberately not in this list: they run
+  // from the repository and leave nothing behind, so nobody reads them on the
+  // installed system.
+  const repo = "https://github.com/justfortheloveof/omarchy-bar-plugin-power-lenovo-battery-conservation";
+
+  for (const f of [
+    "bin/lenovo-power-conservation",
+    "policy/lenovo-power-conservation.rules.example",
+  ]) {
+    const text = fs.readFileSync(path.join(__dirname, "..", f), "utf8");
+    assert.ok(text.includes(repo), `${f} should name ${repo}`);
+  }
+});
+
+test("the helper says how to remove it", () => {
+  // A root-owned file with no recorded uninstall route is the failure mode this
+  // is guarding against, so the removal path has to be in the file too.
+  const source = fs.readFileSync(HELPER, "utf8");
+  assert.match(source, /uninstall\.sh/, "should name uninstall.sh");
+  assert.match(source, /keeps no state/, "should say it is safe to delete");
+});
+
 test("install.sh, uninstall.sh and the helper agree on the installed path", () => {
   // If these drift, the panel elevates a path that does not exist or uninstall
   // deletes the wrong file. Each script composes the full path from a directory

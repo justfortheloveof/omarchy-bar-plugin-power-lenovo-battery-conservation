@@ -2,6 +2,13 @@
 // helper, so a burst of toggles asks for your password once instead of once per
 // click.
 //
+// Source:  https://github.com/justfortheloveof/omarchy-bar-plugin-power-lenovo-battery-conservation
+// License: MIT, the same terms as Omarchy itself.
+//
+// If you are reading this in /etc/polkit-1/rules.d, you copied it from that
+// repository, or from the plugin's policy/ directory. Removing the file removes
+// the authorisation; nothing else is left behind.
+//
 // This file is NOT installed by install.sh, and nothing needs it. Without it
 // every toggle authenticates, because pkexec uses the stock
 // org.freedesktop.policykit.exec action and that is `auth_admin`, not

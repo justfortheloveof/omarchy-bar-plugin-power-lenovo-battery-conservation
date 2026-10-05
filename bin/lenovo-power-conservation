@@ -2,10 +2,17 @@
 #
 # lenovo-power-conservation: read or set Lenovo battery conservation mode.
 #
-# This is the only part of the plugin that ever runs as root. install.sh puts
-# this file at /usr/local/libexec/lenovo-power/conservation, owned by root and
-# not writable by anyone else, and that installed copy is the only thing this
-# plugin ever asks to be elevated.
+# Source:   https://github.com/justfortheloveof/omarchy-bar-plugin-power-lenovo-battery-conservation
+# License:  MIT, the same terms as Omarchy itself.
+# Installed by install.sh from that repository. Removed by uninstall.sh from
+# the same repository, or by deleting the file, since it keeps no state.
+#
+# If you are reading this in /usr/local/libexec/lenovo-power/conservation and
+# wondering where it came from: that repository, and that is the only thing it
+# does. It is root-owned and not writable by anyone else, which is the point.
+#
+# This is the only part of the plugin that ever runs as root, and that installed
+# copy is the only thing the plugin ever asks to be elevated.
 #
 # What makes that worth doing is what this script does *not* accept. It takes no
 # path from its caller: it resolves the kernel attribute itself, from a glob
