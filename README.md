@@ -7,8 +7,8 @@ charging around 80% instead of 100% and slows long-term battery wear on a
 machine that spends its life plugged in.
 
 `Panel.qml` and `Model.js` are currently byte-identical to the upstream commit
-pinned in `upstream.lock`. `manifest.json` is the only file that differs: the
-plugin id, name and description, plus `omarchy.clonedFrom`.
+pinned in `upstream.lock`. `manifest.json` is the only file this fork changes
+from upstream; `Conservation.js` and `tests/` are new.
 
 ## How this relates to upstream
 
