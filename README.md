@@ -6,9 +6,12 @@ mode: the `ideapad_acpi` driver's `conservation_mode` setting, which stops
 charging around 80% instead of 100% and slows long-term battery wear on a
 machine that spends its life plugged in.
 
-`Panel.qml` and `Model.js` are currently byte-identical to the upstream commit
-pinned in `upstream.lock`. `manifest.json` is the only file this fork changes
-from upstream; `Conservation.js`, `bin/`, `policy/` and `tests/` are new.
+`Panel.qml` is upstream plus a battery conservation section, and `Model.js` is
+upstream unchanged. Everything this fork adds sits in blocks marked
+`// ---------- ... ----------`; the only edit inside code upstream owns is two
+methods appended to the existing `ShellIpc` block. `manifest.json` is the only
+other upstream file this fork changes. `Conservation.js`, `bin/`, `policy/` and
+`tests/` are new.
 
 ## How this relates to upstream
 
@@ -38,7 +41,7 @@ identifiers would detach the widget from its place in the bar and break
 That commit is the common ancestor for every merge.
 
 ```bash
-tools/sync-upstream --check    # what upstream has done, touches nothing
+tools/sync-upstream --check    # what upstream has done, and what we have, touches nothing
 tools/sync-upstream            # merge it in
 ```
 
@@ -159,6 +162,34 @@ omarchy-restart-shell
 It only turns `AUTH_ADMIN` into `AUTH_ADMIN_KEEP` for one exact command line,
 `.../conservation set <0|1>`, on a local session, for members of `wheel`.
 Nothing else on the system changes, and deleting the file undoes it.
+
+## Using it
+
+Open the Power panel from the battery icon in the bar. Under **POWER PROFILE**
+there is now a **BATTERY CONSERVATION** section with one toggle.
+
+The row tells you which state you are in, and says so rather than guessing:
+
+| Row shows | Means |
+|---|---|
+| toggle, enabled | the attribute was read; clicking asks for your password |
+| `Run sudo ./install.sh...` | the helper is not installed, so changes are impossible |
+| `This machine has no Lenovo conservation_mode attribute.` | not an IdeaPad; nothing to do |
+| `Could not read the current value.` | the attribute exists but reports something unexpected, so the toggle stays disabled |
+
+Reading is silent and never prompts. Only writing prompts.
+
+From a keybinding or a script, over `omarchy-shell`:
+
+```bash
+omarchy-shell omarchy.power conservationStatus   # on, off, or unknown
+omarchy-shell omarchy.power toggleConservation   # prints the value it asked for
+```
+
+`toggleConservation` returns `0` or `1`, the value it asked the kernel to write,
+or nothing if it declined. It does not return the result: `pkexec` prompts, so
+the write has not happened when it replies. Ask `conservationStatus` again a
+moment later for the truth.
 
 ## Install
 

@@ -6,65 +6,43 @@ const vm = require("node:vm");
 
 const ctx = vm.createContext({});
 vm.runInContext(fs.readFileSync(`${__dirname}/../Conservation.js`, "utf8"), ctx);
-const { resolveAttr, parseState, nextValue, isAcceptedValue, describe } = ctx;
+const { statusWord, parseState, nextValue, isAcceptedValue, describe } = ctx;
 
-const ATTR = "/sys/bus/platform/drivers/ideapad_acpi/VPC200C:00/conservation_mode";
-const ATTR2 = "/sys/bus/platform/drivers/ideapad_acpi/VPC200C:01/conservation_mode";
+// Exactly what bin/lenovo-power-conservation prints for `status`.
+const INSTALLED_ON = "1";
+const INSTALLED_OFF = "0";
+const INSTALLED_UNKNOWN = "unknown";
+const NO_SUCH_MACHINE = "unsupported";
+const NOT_INSTALLED = "not-installed";
 
-test("resolveAttr finds the attribute in a glob's matches", () => {
-  assert.equal(resolveAttr([ATTR]), ATTR);
-  assert.equal(resolveAttr([ATTR, ATTR2]), ATTR, "takes the first match");
+test("statusWord takes the first non-blank line", () => {
+  assert.equal(statusWord("1\n"), "1");
+  assert.equal(statusWord("  0  \n"), "0");
+  assert.equal(statusWord("\n\n1\n"), "1");
+  assert.equal(statusWord("unknown"), "unknown");
 });
 
-test("resolveAttr reports no attribute when the glob matched nothing", () => {
-  // The ordinary answer on a machine that is not a Lenovo IdeaPad.
-  assert.equal(resolveAttr([]), null);
+test("statusWord reports nothing for empty output", () => {
+  // A helper that printed nothing, or was never run.
+  assert.equal(statusWord(""), "");
+  assert.equal(statusWord("\n"), "");
+  assert.equal(statusWord("   \n\n"), "");
+  assert.equal(statusWord(null), "");
+  assert.equal(statusWord(undefined), "");
 });
 
-test("resolveAttr tolerates absent or malformed match lists", () => {
-  assert.equal(resolveAttr(undefined), null);
-  assert.equal(resolveAttr(null), null);
-  assert.equal(resolveAttr(""), null);
-  assert.equal(resolveAttr(42), null);
-  assert.equal(resolveAttr({}), null);
-});
-
-test("resolveAttr skips blank entries", () => {
-  assert.equal(resolveAttr(["", "   ", ATTR]), ATTR);
-  assert.equal(resolveAttr(["", "   "]), null);
-});
-
-test("resolveAttr refuses a path that is not the conservation attribute", () => {
-  // Guards against a stray or hostile glob result being treated as ours.
-  assert.equal(resolveAttr(["/sys/bus/platform/drivers/ideapad_acpi/VPC200C:00/input"]), null);
-  assert.equal(resolveAttr(["/etc/passwd"]), null);
-  assert.equal(resolveAttr(["conservation_mode"]), null, "needs a directory component");
-  // Any directory is fine as long as the basename is the attribute: the caller
-  // does the globbing, this only vets what came back.
-  assert.equal(resolveAttr(["/tmp/conservation_mode"]), "/tmp/conservation_mode");
-});
-
-test("parseState maps the two values the attribute can hold", () => {
-  assert.equal(parseState("1"), true);
-  assert.equal(parseState("0"), false);
-});
-
-test("parseState trims what the shell handed over", () => {
-  assert.equal(parseState("1\n"), true);
-  assert.equal(parseState("  0  \n"), false);
+test("parseState maps the two values the mode can hold", () => {
+  assert.equal(parseState(INSTALLED_ON), true);
+  assert.equal(parseState(INSTALLED_OFF), false);
 });
 
 test("parseState reports unknown rather than guessing", () => {
   // Unknown must not collapse to false: that would invite a toggle derived
-  // from a state nobody actually read.
-  assert.equal(parseState("2"), null);
-  assert.equal(parseState(""), null);
-  assert.equal(parseState("\n"), null);
-  assert.equal(parseState("true"), null);
-  assert.equal(parseState("01"), null);
-  assert.equal(parseState("1 0"), null);
+  // from a value nobody actually read.
+  for (const word of [INSTALLED_UNKNOWN, NO_SUCH_MACHINE, NOT_INSTALLED, "", "2", "true", "01"]) {
+    assert.equal(parseState(word), null, `"${word}" must not read as off`);
+  }
   assert.equal(parseState(null), null);
-  assert.equal(parseState(undefined), null);
 });
 
 test("nextValue flips a known state", () => {
@@ -80,8 +58,8 @@ test("nextValue refuses an unknown state", () => {
 });
 
 test("nextValue round-trips through parseState", () => {
-  for (const raw of ["1", "0"]) {
-    assert.equal(parseState(nextValue(parseState(raw))), !parseState(raw));
+  for (const word of [INSTALLED_ON, INSTALLED_OFF]) {
+    assert.equal(parseState(nextValue(parseState(word))), !parseState(word));
   }
 });
 
@@ -93,8 +71,9 @@ test("isAcceptedValue allows only the two exact strings", () => {
 test("isAcceptedValue rejects everything else", () => {
   // This gates the pkexec call, so anything loose here would be loose on the
   // way to root.
-  for (const bad of ["", " ", "01", "2", "-1", "0\n", "1 ", true, false, 0, 1, null, undefined, {}]) {
-    assert.equal(isAcceptedValue(bad), false, `${JSON.stringify(bad)} must be rejected`);
+  const bad = ["", " ", "01", "2", "-1", "0\n", "1 ", true, false, 0, 1, null, undefined, {}, "unknown"];
+  for (const value of bad) {
+    assert.equal(isAcceptedValue(value), false, `${JSON.stringify(value)} must be rejected`);
   }
 });
 
@@ -102,27 +81,51 @@ test("isAcceptedValue only ever admits what nextValue produces", () => {
   for (const state of [true, false]) {
     assert.equal(isAcceptedValue(nextValue(state)), true);
   }
+  assert.equal(isAcceptedValue(nextValue(null)), false);
 });
 
-test("describe reports supported and active when the attribute is present", () => {
-  assert.deepEqual({ ...describe([ATTR], "1") }, { supported: true, active: true });
-  assert.deepEqual({ ...describe([ATTR], "0") }, { supported: true, active: false });
+test("describe reports a working machine with the mode on or off", () => {
+  assert.deepEqual({ ...describe(INSTALLED_ON) }, { installed: true, supported: true, active: true });
+  assert.deepEqual({ ...describe(INSTALLED_OFF) }, { installed: true, supported: true, active: false });
+  assert.deepEqual({ ...describe("1\n") }, { installed: true, supported: true, active: true });
 });
 
-test("describe reports unsupported when the attribute is absent", () => {
-  // This is what an HP or any other non-Lenovo machine gets, and raw is null
-  // because nothing was read.
-  assert.deepEqual({ ...describe([], null) }, { supported: false, active: null });
+test("describe separates a machine without the attribute from an uninstalled helper", () => {
+  // Both leave the row unusable, but only one is worth telling the user to fix.
+  const unsupported = describe(NO_SUCH_MACHINE);
+  assert.equal(unsupported.installed, true, "the helper ran, so it is installed");
+  assert.equal(unsupported.supported, false);
+  assert.equal(unsupported.active, null);
+
+  const missing = describe(NOT_INSTALLED);
+  assert.equal(missing.installed, false);
+  assert.equal(missing.supported, false);
+  assert.equal(missing.active, null);
 });
 
-test("describe separates present-but-unknown from absent", () => {
-  const unknown = describe([ATTR], "banana");
+test("describe reports present-but-unreadable separately from absent", () => {
+  const unknown = describe(INSTALLED_UNKNOWN);
+  assert.equal(unknown.installed, true);
   assert.equal(unknown.supported, true, "the attribute is there");
   assert.equal(unknown.active, null, "but its value means nothing to us");
 });
 
-test("describe ignores a value it was handed when nothing is supported", () => {
-  // Defensive: a stale read from a machine that just stopped matching should
-  // not leave active=true behind.
-  assert.deepEqual({ ...describe([], "1") }, { supported: false, active: null });
+test("describe treats silence as not installed", () => {
+  // The helper failed to run at all. Nothing is claimed about the hardware.
+  assert.deepEqual({ ...describe("") }, { installed: false, supported: false, active: null });
+});
+
+test("describe ignores a stale value from a machine that stopped matching", () => {
+  assert.deepEqual({ ...describe("") }, { installed: false, supported: false, active: null });
+  assert.equal(describe("").active, null);
+});
+
+test("the helper's status words are the ones this module knows", () => {
+  // If bin/lenovo-power-conservation ever changes what it prints, these tests
+  // should be the thing that notices.
+  const helper = fs.readFileSync(`${__dirname}/../bin/lenovo-power-conservation`, "utf8");
+  assert.match(helper, /printf 'unsupported\\n'/, "prints the unsupported word");
+  assert.match(helper, /printf 'unknown\\n'/, "prints the unknown word");
+  assert.match(helper, /printf '0\\n'/, "prints 0");
+  assert.match(helper, /printf '1\\n'/, "prints 1");
 });

@@ -5,6 +5,7 @@ import Quickshell.Services.UPower
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
+import "Conservation.js" as Conservation
 
 Panel {
   id: root
@@ -19,6 +20,26 @@ Panel {
   property string activeProfile: ""
   property int profileIndex: 0
   property bool cursorActive: false
+  // ---------- Lenovo battery conservation ----------
+  // State comes from asking the installed helper, which is the only thing in
+  // this plugin that touches the attribute. Every flag below starts pessimistic,
+  // so a probe that never runs leaves a row that is plainly unusable rather than
+  // a toggle that looks live.
+  readonly property string conservationHelper: "/usr/local/libexec/lenovo-power/conservation"
+  property bool conservationInstalled: false
+  property bool conservationSupported: false
+  property bool conservationKnown: false
+  property bool conservationActive: false
+  property bool conservationBusy: false
+  // Only a toggle whose current value we actually read may be flipped.
+  readonly property bool conservationReady:
+    conservationInstalled && conservationSupported && conservationKnown && !conservationBusy
+  readonly property string conservationDescription: {
+    if (!conservationInstalled) return "Run sudo ./install.sh in the plugin directory to enable changes."
+    if (!conservationSupported) return "This machine has no Lenovo conservation_mode attribute."
+    if (!conservationKnown) return "Could not read the current value."
+    return "Stop charging around 80% to reduce long-term wear."
+  }
   readonly property bool showPercentage: setting("showPercentage", false) === true
   // With the percentage shown the button paints a text block wider than an
   // icon, so the open-panel mark takes the painted width instead of the
@@ -59,6 +80,37 @@ Panel {
 
   function profileIcon(name) {
     return Model.profileIcon(name)
+  }
+
+  // ---------- Lenovo battery conservation ----------
+  // Fold whatever the helper printed into the panel's flags. Anything we cannot
+  // read leaves conservationKnown false, which keeps the row disabled rather
+  // than showing "off" for a state nobody read.
+  function ingestConservationStatus(raw) {
+    var state = Conservation.describe(raw)
+    root.conservationInstalled = state.installed
+    root.conservationSupported = state.supported
+    root.conservationKnown = state.supported && state.active !== null
+    root.conservationActive = state.active === true
+  }
+
+  function refreshConservation() {
+    if (!conservationProbe.running) conservationProbe.running = true
+  }
+
+  // Returns the value asked for, or "" if nothing was. The write itself is
+  // asynchronous: pkexec prompts, so the state on screen only changes when
+  // conservationAction reports back.
+  function requestConservationToggle() {
+    if (!root.conservationReady) return ""
+
+    var value = Conservation.nextValue(root.conservationActive)
+    if (!Conservation.isAcceptedValue(value)) return ""
+
+    root.conservationBusy = true
+    conservationAction.command = ["pkexec", root.conservationHelper, "set", value]
+    conservationAction.running = true
+    return value
   }
 
   readonly property bool fullyCharged: {
@@ -138,6 +190,8 @@ Panel {
     if (!batteryProc.running) batteryProc.running = true
     if (!profilesProc.running) profilesProc.running = true
     if (!systemProc.running) systemProc.running = true
+    // ---------- Lenovo battery conservation ----------
+    root.refreshConservation()
   }
 
   function updateKeyValue(raw, targetName) {
@@ -183,6 +237,14 @@ Panel {
     function hide() { root.close() }
     function toggle() { root.toggle() }
     function togglePercentage() { root.togglePercentage() }
+    // ---------- Lenovo battery conservation ----------
+    // Returns the value asked for, not the result: pkexec prompts, so the write
+    // has not happened yet when this replies.
+    function toggleConservation(): string { return root.requestConservationToggle() }
+    function conservationStatus(): string {
+      if (!root.conservationKnown) return "unknown"
+      return root.conservationActive ? "on" : "off"
+    }
   }
 
   onOpenedChanged: {
@@ -226,6 +288,42 @@ Panel {
   Process {
     id: actionProc
     onExited: root.refresh()
+  }
+
+  // ---------- Lenovo battery conservation ----------
+  // Reading needs no privilege, so this never prompts. The helper's path is
+  // passed as an argument rather than spliced into the string, and the string
+  // itself is fixed, so nothing the caller controls reaches the shell.
+  Process {
+    id: conservationProbe
+    command: ["sh", "-c", "if [ -x \"$0\" ]; then exec \"$0\" status; else echo not-installed; fi", root.conservationHelper]
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.ingestConservationStatus(text) }
+  }
+
+  Process {
+    id: conservationAction
+    stdout: SplitParser { onRead: function(line) { root.ingestConservationStatus(line) } }
+    // The helper reports why a write was refused; a failure here is a setup
+    // problem or a cancelled prompt, and both are worth saying out loud.
+    stderr: SplitParser {
+      onRead: function(line) {
+        var msg = String(line).trim()
+        if (msg.length > 0) {
+          Quickshell.execDetached([
+            "omarchy-notification-send",
+            "-g", "󰂅",
+            "Battery Conservation",
+            msg
+          ])
+        }
+      }
+    }
+    // Re-read rather than trust the write: the helper verifies it, but the
+    // state on screen should come from the attribute, not from what we asked for.
+    onExited: {
+      root.conservationBusy = false
+      root.refreshConservation()
+    }
   }
 
   Timer { interval: 5000; running: root.opened; repeat: true; onTriggered: root.refresh() }
@@ -501,6 +599,34 @@ Panel {
                 }
               }
             }
+          }
+        }
+
+        // ---------- Lenovo battery conservation ----------
+        PanelSeparator {
+          foreground: root.bar.foreground
+        }
+
+        Column {
+          width: parent.width
+          spacing: Style.space(10)
+
+          PanelSectionHeader {
+            text: "BATTERY CONSERVATION"
+            foreground: root.bar.foreground
+            fontFamily: root.bar.fontFamily
+          }
+
+          Toggle {
+            width: parent.width
+            label: "Conservation Mode"
+            description: root.conservationDescription
+            foreground: root.bar.foreground
+            accent: Color.accent
+            fontFamily: root.bar.fontFamily
+            checked: root.conservationActive
+            enabled: root.conservationReady
+            onClicked: root.requestConservationToggle()
           }
         }
       }

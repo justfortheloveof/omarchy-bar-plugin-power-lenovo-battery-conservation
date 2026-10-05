@@ -216,6 +216,13 @@ main() {
 
 	if [[ $BASE_SHA == "$TIP_SHA" ]]; then
 		note "Already up to date with $UPSTREAM_BRANCH."
+		# Still worth reporting: "what has this fork changed?" is the question
+		# --check exists to answer, and it is most useful precisely when there
+		# is nothing new upstream to merge.
+		if ((check_only)); then
+			note ""
+			report
+		fi
 		return 0
 	fi
 
