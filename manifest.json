@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.justfortheloveof.power-lenovo-battery-conservation",
+  "name": "Power - with Lenovo Battery Conservation Toggle",
+  "version": "0.1.0",
+  "author": "justfortheloveof",
+  "license": "MIT",
+  "description": "The Omarchy power panel, plus Lenovo battery conservation mode toggle.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Power - with Lenovo Battery Conservation Toggle",
+    "description": "Battery, power profile and system stats, plus Lenovo battery conservation mode toggle.",
+    "category": "System",
+    "allowMultiple": false
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.power"
+  }
+}

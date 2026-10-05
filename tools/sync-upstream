@@ -1,0 +1,262 @@
+#!/usr/bin/env bash
+#
+# Merge the first-party omarchy.power plugin into this fork.
+#
+# A panel builds its own contents inline; there is no API for another plugin to
+# add a section to one, so omarchy.clonedFrom is the only supported way to
+# change a built-in panel, and it replaces the original rather than layering on
+# top (enabling the clone disables the source; removing it restores it). So this
+# repository is a copy of shell/plugins/panels/power/ with our own additions,
+# and the only real cost of that choice is staying in step with upstream.
+#
+# Why not `git rebase`: the shell only finds a third-party plugin whose
+# manifest.json is at the top level of ~/.config/omarchy/plugins/<id>/, so
+# Panel.qml has to be at the root of this repository. Upstream keeps the same
+# file at shell/plugins/panels/power/Panel.qml. Git can only merge paths that
+# exist on both sides, so there is no shared ancestor to rebase onto.
+#
+# So do the merge by hand, against the commit pinned in upstream.lock. For each
+# file git merge-file does a three-way merge: ours, the pinned base, and the
+# current upstream tip. That is the same merge rebase runs internally. Changes
+# that do not overlap combine on their own; only real conflicts stop for you.
+#
+# This is a development-time tool. The installed plugin never runs it.
+#
+# Usage: tools/sync-upstream [--check]
+
+set -euo pipefail
+
+readonly TRACKED=(Panel.qml Model.js manifest.json)
+readonly LOCK_NAME=upstream.lock
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+
+die() {
+	printf 'sync-upstream: %s\n' "$*" >&2
+	exit 1
+}
+
+note() {
+	printf '%s\n' "$*"
+}
+
+# How many lines differ between two files. grep exits 1 when nothing differs,
+# which is not an error here.
+changed_lines() {
+	diff -u "$1" "$2" | grep -c '^[+-][^+-]' || true
+}
+
+# ---------------------------------------------------------------------------
+# upstream.lock
+# ---------------------------------------------------------------------------
+
+# The value of one key, e.g. lock_value sha -> 0260d2ac...
+lock_value() {
+	local key=$1 line
+	line=$(grep -m1 "^${key}=" "$LOCK_NAME" || true)
+	[[ -n $line ]] || die "$LOCK_NAME has no '$key=' entry"
+	printf '%s' "${line#*=}"
+}
+
+pin_lock() {
+	sed -i "s/^sha=.*/sha=$1/" "$LOCK_NAME"
+}
+
+# ---------------------------------------------------------------------------
+# the upstream mirror
+# ---------------------------------------------------------------------------
+
+upstream_git() {
+	git --git-dir "$MIRROR" "$@"
+}
+
+ensure_mirror() {
+	if [[ ! -d $MIRROR ]]; then
+		note "creating upstream mirror at $MIRROR"
+		git init --bare --quiet "$MIRROR"
+		upstream_git remote add origin "$UPSTREAM_REPO"
+	fi
+}
+
+fetch_upstream() {
+	# --filter=blob:none keeps the mirror at a few MB; git fetches the
+	# individual file blobs on demand when we `git show` them below.
+	upstream_git fetch --quiet --filter=blob:none origin "$UPSTREAM_BRANCH" ||
+		die "could not fetch $UPSTREAM_BRANCH from $UPSTREAM_REPO"
+
+	# The pinned base may be older than this mirror's history, and without it
+	# there is no common ancestor to merge against.
+	if ! upstream_git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+		note "fetching pinned base ${BASE_SHA:0:7}"
+		upstream_git fetch --quiet origin "$BASE_SHA" ||
+			die "pinned base ${BASE_SHA:0:7} is not fetchable, so there is nothing to merge against. Upstream may have rewritten history."
+	fi
+
+	TIP_SHA=$(upstream_git rev-parse "origin/$UPSTREAM_BRANCH")
+}
+
+# One tracked file, out of the omarchy tree at a given commit.
+upstream_file() {
+	local sha=$1 name=$2
+	upstream_git show "$sha:$UPSTREAM_PATH/$name" ||
+		die "upstream has no $UPSTREAM_PATH/$name at ${sha:0:7}"
+}
+
+# ---------------------------------------------------------------------------
+# the two modes
+# ---------------------------------------------------------------------------
+
+# --check: say where each file stands, change nothing.
+report() {
+	local name
+	for name in "${TRACKED[@]}"; do
+		upstream_file "$BASE_SHA" "$name" >"$WORK/base"
+		upstream_file "$TIP_SHA" "$name" >"$WORK/theirs"
+
+		if cmp -s "$name" "$WORK/theirs"; then
+			note "  $name: identical to upstream"
+		elif cmp -s "$name" "$WORK/base"; then
+			note "  $name: unmodified, upstream moved it $(changed_lines "$WORK/base" "$WORK/theirs") lines"
+		else
+			note "  $name: forked, $(changed_lines "$WORK/theirs" "$name") lines from upstream"
+		fi
+	done
+}
+
+# merge: fold upstream into each tracked file. Records any file that conflicted
+# in CONFLICTS so the caller can refuse to advance the pin.
+merge() {
+	local name status
+
+	for name in "${TRACKED[@]}"; do
+		upstream_file "$BASE_SHA" "$name" >"$WORK/base"
+		upstream_file "$TIP_SHA" "$name" >"$WORK/theirs"
+
+		# -L replaces the temp paths git merge-file would print, so a conflict
+		# block reads as ours / the pinned base / current upstream.
+		status=0
+		git merge-file --diff3 \
+			-L "ours ($name)" \
+			-L "base (upstream ${BASE_SHA:0:7})" \
+			-L "upstream ($UPSTREAM_BRANCH ${TIP_SHA:0:7})" \
+			-p "$name" "$WORK/base" "$WORK/theirs" \
+			>"$WORK/merged" || status=$?
+
+		if ((status > 0)); then
+			CONFLICTS+=("$name")
+			note "  $name: $status conflict(s), markers written"
+		else
+			note "  $name: merged clean"
+		fi
+
+		mv "$WORK/merged" "$name"
+	done
+}
+
+# After merging, show how far the fork still sits from upstream.
+show_delta() {
+	local name forked=0
+
+	for name in "${TRACKED[@]}"; do
+		upstream_file "$TIP_SHA" "$name" >"$WORK/theirs"
+		if ! cmp -s "$name" "$WORK/theirs"; then
+			forked=1
+			note "  $name: $(changed_lines "$WORK/theirs" "$name") lines"
+		fi
+	done
+
+	((forked)) || note "  none: this fork currently matches upstream exactly"
+}
+
+# ---------------------------------------------------------------------------
+
+main() {
+	local check_only=0 arg stuck name
+
+	for arg in "$@"; do
+		case "$arg" in
+		--check) check_only=1 ;;
+		-h | --help)
+			# Print this file's header comment, so the usage text cannot drift
+			# out of sync with the code implementing it. Stops at the first line
+			# after the shebang that is not a comment.
+			awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"
+			return 0
+			;;
+		*)
+			die "unknown option '$arg' (try --check)"
+			;;
+		esac
+	done
+
+	REPO=$(git rev-parse --show-toplevel) ||
+		die "not inside a git repository. Run this from a checkout of the plugin."
+	cd "$REPO"
+
+	BASE_SHA=$(lock_value sha)
+	UPSTREAM_PATH=$(lock_value path)
+	UPSTREAM_REPO=$(lock_value repo)
+	UPSTREAM_BRANCH=$(lock_value branch)
+
+	# Scratch state is disposable. Set OMARCHY_UPSTREAM_MIRROR to keep it.
+	MIRROR=${OMARCHY_UPSTREAM_MIRROR:-${TMPDIR:-/tmp}/omarchy-power-lenovo-battery-conservation-upstream.git}
+	WORK=$(mktemp -d)
+	trap 'rm -rf "$WORK"' EXIT
+
+	CONFLICTS=()
+
+	ensure_mirror
+	fetch_upstream
+
+	note "base     $BASE_SHA"
+	note "upstream $TIP_SHA ($UPSTREAM_BRANCH)"
+	note ""
+
+	if [[ $BASE_SHA == "$TIP_SHA" ]]; then
+		note "Already up to date with $UPSTREAM_BRANCH."
+		return 0
+	fi
+
+	if ! upstream_git merge-base --is-ancestor "$BASE_SHA" "$TIP_SHA"; then
+		die "the pinned base ${BASE_SHA:0:7]} is no longer an ancestor of $UPSTREAM_BRANCH, so there is nothing to merge against. $UPSTREAM_REPO was rebased or rewritten. Reconcile by hand, then point 'sha=' in $LOCK_NAME at a commit on $UPSTREAM_BRANCH."
+	fi
+
+	note "upstream changes to $UPSTREAM_PATH since the pinned base:"
+	upstream_git diff --stat "$BASE_SHA" "$TIP_SHA" -- "$UPSTREAM_PATH"
+	note ""
+
+	if ((check_only)); then
+		report
+		return 0
+	fi
+
+	# Merging on top of leftover markers would nest a second set inside the
+	# first, so make the caller clear them first.
+	stuck=$(grep -l '^<<<<<<<' "${TRACKED[@]}" 2>/dev/null | tr '\n' ' ' || true)
+	if [[ -n $stuck ]]; then
+		die "these files still contain conflict markers from an earlier run, so merging again would nest another set inside them: ${stuck% } Resolve them (or git checkout them to start over), then re-run."
+	fi
+
+	merge
+
+	if ((${#CONFLICTS[@]})); then
+		# Leave the pin alone: a re-run after resolving must merge from the same
+		# base, and will come back clean once the resolution matches it.
+		note ""
+		note "Resolve by hand (<<< ours, ||| base, >>> upstream), commit, then re-run to re-pin:"
+		printf '  %s\n' "${CONFLICTS[@]}"
+		return 1
+	fi
+
+	pin_lock "$TIP_SHA"
+
+	note ""
+	note "pinned to $TIP_SHA. This fork's remaining delta from upstream:"
+	show_delta
+	note ""
+	note "Review with git diff, then commit."
+}
+
+main "$@"

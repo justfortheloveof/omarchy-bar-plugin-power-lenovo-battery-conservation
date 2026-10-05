@@ -1,0 +1,14 @@
+# Merge base for tools/sync-upstream.
+#
+# sha   the omarchy commit whose shell/plugins/panels/power/* this fork was last
+#       merged against. It is the common ancestor of every merge.
+# path  where the first-party plugin lives in the omarchy tree.
+# repo  branch  where to fetch from.
+#
+# Only tools/sync-upstream should change sha, and only after a conflict-free
+# merge. Editing it by hand to skip a version silently discards every upstream
+# change in between.
+sha=81145eb1fd41532fcae4310b26f860608e2eaf82
+path=shell/plugins/panels/power
+repo=https://github.com/basecamp/omarchy.git
+branch=quattro
