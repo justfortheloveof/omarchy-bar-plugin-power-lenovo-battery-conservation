@@ -6,10 +6,10 @@ mode: the `ideapad_acpi` driver's `conservation_mode` setting, which stops
 charging around 80% instead of 100% and slows long-term battery wear on a
 machine that spends its life plugged in.
 
-`Panel.qml` is upstream plus a battery conservation section, and `Model.js` is
-upstream unchanged. Everything this fork adds sits in blocks marked
-`// ---------- ... ----------`; the only edit inside code upstream owns is two
-methods appended to the existing `ShellIpc` block. `manifest.json` is the only
+`Panel.qml` is the installed omarchy's power panel plus a battery conservation
+section, and `Model.js` is unchanged. Everything this fork adds sits in blocks
+marked `// ---------- ... ----------`; the only edit inside code upstream owns is
+two methods appended to the existing IPC handler. `manifest.json` is the only
 other upstream file this fork changes. `Conservation.js`, `bin/`, `policy/` and
 `tests/` are new.
 
@@ -37,8 +37,26 @@ identifiers would detach the widget from its place in the bar and break
 
 ## Tracking upstream
 
-`upstream.lock` records the omarchy commit this fork was last merged against.
-That commit is the common ancestor for every merge.
+`upstream.lock` records the omarchy commit this fork tracks, and that commit is
+the common ancestor for every merge.
+
+**It tracks the omarchy you have installed, not the tip of omarchy's branch.**
+That is the part worth understanding, because getting it wrong is invisible until
+the widget fails to appear.
+
+A cloned first-party panel is not self-contained. It imports types and singleton
+members that the shell provides, so panel code from a newer omarchy can
+reference API this machine does not have:
+
+| upstream commit | what `Panel.qml` gained | what happens on an older omarchy |
+|---|---|---|
+| `c231097d` | `ShellIpc`, plus its `qmldir` entry | `ShellIpc is not a type`; the widget never loads and the bar slot is simply empty |
+| `b18ab495` | `Style.duration()`, `Style.reduceMotion` | `Style` exists, so these fail as missing members |
+
+Neither produces an error anyone sees. So the order is: **update omarchy first,
+then run `tools/sync-upstream`** to advance the pin. Until then, `--check`
+reporting drift is correct information rather than an action item, and
+`bin/check` fails if the panel ever outruns the shell again.
 
 ```bash
 tools/sync-upstream --check    # what upstream has done, and what we have, touches nothing
@@ -60,12 +78,12 @@ is which:
 
 ```
 <<<<<<< ours (Panel.qml)
-  ShellIpc { // FORK: ours
+  Button { text: root.modeLabel() }   // FORK: ours
 ||||||| base (upstream 0260d2a)
-  IpcHandler {
+  Button { }
 =======
-  ShellIpc {
->>>>>>> upstream (quattro b9e0ac4)
+  Button { text: root.heroStatusText }   // upstream
+>>>>>>> upstream (quattro 81145eb1)
 ```
 
 The pin only advances when every file merged clean. Resolve a conflict, commit

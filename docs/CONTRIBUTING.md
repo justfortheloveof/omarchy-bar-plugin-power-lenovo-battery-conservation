@@ -17,11 +17,12 @@ listed, so a partial run never reads as green.
 | `manifest.json` parse | invalid JSON |
 | `node --test`, both suites | any test failure |
 | `Model.js` against the pinned upstream sha | any divergence at all |
-| `qmllint` | `Panel.qml` not parsing |
+| `qmllint` type resolution | `Panel.qml` referencing shell API this omarchy lacks |
+| `Style` members | `Panel.qml` using a `Style` member the installed omarchy lacks |
 | `omarchy plugin validate` | manifest schema |
 | `tools/sync-upstream --check` | never; reports where this fork sits |
 
-Two of those deserve a note.
+Three of those deserve a note.
 
 **`Model.js` must stay byte-identical to upstream.** The README calls it
 unchanged, and every line added to it is a line that can conflict on the next
@@ -29,14 +30,24 @@ sync. Upstream tests it in `test/shell.d/power-test.sh`, so churn there is noise
 for them as well. If this stage fails, the fix is almost always to revert
 `Model.js` and put the code somewhere else.
 
-**`qmllint` is gated on its exit status, not its output.** qmllint reports
-everything as `Warning: ... [category]`, a fatal syntax error included, so
-grepping for `Error` finds nothing. The exit code is the signal: 0 when the file
-parses, 255 when it does not. Gating on warning *count* instead would fail
-upstream's own panel, which produces dozens on an Omarchy box.
+**The shell API stages are the important ones.** A cloned first-party panel is
+not self-contained: it imports types and singleton members the shell provides,
+so panel code from a newer omarchy can reference API this machine does not
+have. `ShellIpc` and `Style.duration()` both shipped here first and both failed
+silently, the widget just never appearing in the bar. Type resolution reuses
+qmllint's own resolver rather than a hand-rolled list, so nothing new to
+maintain; `signal-handler-parameters` is excluded because upstream's own file
+produces it. The `Style` check exists separately because qmllint structurally
+cannot catch a missing member on a singleton that does resolve.
+
+**`qmllint` is otherwise gated on its exit status, not its output.** qmllint
+reports everything as `Warning: ... [category]`, a fatal syntax error included,
+so grepping for `Error` finds nothing. The exit code is the signal: 0 when the
+file parses, 255 when it does not.
 
 Stages skipped: no `omarchy` (off-box), no `qmllint` (not installed), no
-upstream mirror (run `tools/sync-upstream` once to create it).
+upstream shell tree. The shell API stages can never run in CI, which has no
+Omarchy; they run for anyone who clones the repo on an Omarchy box.
 
 ## Tests
 
@@ -74,7 +85,7 @@ whenever the two sides do not share a line, so an insertion is free and an edit
 to a line upstream is changing costs a conflict every time.
 
 The only edit inside code upstream owns is two methods appended to the existing
-`ShellIpc` block. If you add another, append it after those.
+`IpcHandler` block. If you add another, append it after those.
 
 **Check a change stays mergeable rather than assuming it.** Three-way merge
 `Panel.qml` against a deliberately adversarial upstream:
@@ -99,8 +110,18 @@ tools/sync-upstream --check   # what upstream has done, and what we have
 tools/sync-upstream           # merge it in
 ```
 
+**`upstream.lock` tracks the omarchy that is installed, not omarchy's tip.** The
+panel is not self-contained: it uses types and `Style` members the shell
+provides, so a merge that outruns the shell breaks the widget in a way that does
+not announce itself.
+
+The order is therefore: update omarchy first, then merge. While omarchy is
+behind, `--check` will keep reporting drift and that is expected. `bin/check`
+is what stops a merge that would go too far.
+
 After merging, run `bin/check`. The `Model.js` stage will tell you if the merge
-touched something it should not have.
+touched something it should not have, and the shell API stages will tell you if
+the merge outran the omarchy you are running.
 
 ## Security
 

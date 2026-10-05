@@ -1,14 +1,28 @@
 # Merge base for tools/sync-upstream.
 #
-# sha   the omarchy commit whose shell/plugins/panels/power/* this fork was last
-#       merged against. It is the common ancestor of every merge.
+# sha tracks the omarchy that is INSTALLED, not the tip of omarchy's branch.
+# That distinction matters: a cloned first-party panel is not self-contained. It
+# imports types and singleton members the shell provides, so panel code from a
+# newer omarchy can reference shell API this machine does not have. Two examples
+# that broke this fork by running ahead:
+#
+#   c231097d  introduced ShellIpc and its qmldir entry. Used from a plugin, which
+#             lives outside the shell's tree, it does not resolve: "ShellIpc is
+#             not a type", and the widget silently vanishes from the bar.
+#   b18ab495  introduced Style.duration() and Style.reduceMotion. Style exists,
+#             so these fail as missing members rather than failing to load.
+#
+# So: update omarchy first, then run tools/sync-upstream to advance this. Until
+# then, --check reporting drift is correct information, not an action item.
+# bin/check enforces the result; see its shell API stage.
+#
 # path  where the first-party plugin lives in the omarchy tree.
 # repo  branch  where to fetch from.
 #
 # Only tools/sync-upstream should change sha, and only after a conflict-free
 # merge. Editing it by hand to skip a version silently discards every upstream
 # change in between.
-sha=81145eb1fd41532fcae4310b26f860608e2eaf82
+sha=0260d2accbc047dda144b4738fdd8a15b9a9e69d
 path=shell/plugins/panels/power
 repo=https://github.com/basecamp/omarchy.git
 branch=quattro
