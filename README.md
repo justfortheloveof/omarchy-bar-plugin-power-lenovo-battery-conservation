@@ -46,14 +46,31 @@ component.
 
 ## Install
 
+Two commands. The first adds the panel; the second installs the one file the
+panel needs before it can change anything.
+
 ```bash
 omarchy plugin add https://github.com/justfortheloveof/omarchy-bar-plugin-power-lenovo-battery-conservation.git --enable
 omarchy-restart-shell
 ```
 
+```bash
+sudo ~/.config/omarchy/plugins/io.github.justfortheloveof.power-lenovo-battery-conservation/install.sh
+```
+
+That is the whole setup. The panel can read the conservation mode as soon as
+the first command finishes, and the second is only needed to *change* it, because
+writing to the kernel attribute needs root. `install.sh` finds its own directory,
+so the absolute path works from anywhere; from a clone of this repository, `cd`
+there and run `sudo ./install.sh`.
+
 This **replaces** the stock Power panel rather than sitting beside it, and
-removing it brings the stock one back. Reading the mode needs nothing further.
-Changing it needs one extra step, covered below.
+removing the plugin brings the stock one back.
+
+If you would rather not type your password on every toggle, there is a one-line
+opt-in: [Caching the authorisation](#caching-the-authorisation).
+
+### Updating and removing
 
 ```bash
 omarchy plugin update io.github.justfortheloveof.power-lenovo-battery-conservation --yes
@@ -64,42 +81,23 @@ Source of truth is this repository. `omarchy plugin add` clones it into
 `~/.config/omarchy/plugins/io.github.justfortheloveof.power-lenovo-battery-conservation/`;
 never edit there, because the next update overwrites it.
 
-## Privileged setup
+## How the privileged part works
+
+Only one command above is privileged. This is the reasoning behind it, and why
+it is shaped the way it is. Skip this section if you just want to use the panel.
+
+### Why a root-owned helper
 
 Reading the current mode needs no privilege: `conservation_mode` is
-world-readable. Changing it does, because it is owned by root. One command, once,
-puts a root-owned helper in place:
+world-readable. Writing it does, because the attribute is owned by root, and the
+kernel offers no unprivileged route to change it. So something has to run as
+root. What it must not be is a file from the plugin directory, which your own
+session can rewrite.
 
-```bash
-sudo ~/.config/omarchy/plugins/io.github.justfortheloveof.power-lenovo-battery-conservation/install.sh
-```
-
-`install.sh` finds its own directory, so the absolute path works from anywhere.
-From a clone of this repository, `cd` there and use `sudo ./install.sh`.
-
-That installs exactly one file:
-
-```
-/usr/local/libexec/lenovo-power/conservation    root:root, mode 0755
-```
-
-Until it is run the panel cannot read the attribute at all, because reading
-goes through the same helper: the row says a setup step is needed and the toggle
-stays disabled. Once it is installed, reading is silent and needs no password;
-only writing prompts.
-
-To remove it again, `sudo ./uninstall.sh`, or simply delete the file, since it
-keeps no state. `omarchy plugin remove` does **not** remove it: that only knows
-about files under `~/.config/omarchy/plugins`.
-
-Both the helper and the optional rules file below carry their source repository
-and licence in their header, so anything installed on your system says where it
-came from and how to remove it.
-
-### Why it is built this way
-
-The installed copy is the only thing this plugin ever asks to be elevated, and
-it is deliberately hard to turn into anything else:
+So `install.sh` places a copy of `bin/lenovo-power-conservation` at
+`/usr/local/libexec/lenovo-power/conservation`, owned by root and writable by
+nobody else, and that installed copy is the only thing the plugin ever asks to be
+elevated. It is deliberately hard to turn into anything else:
 
 - **It takes no path from its caller.** It resolves the kernel attribute itself,
   from a glob fixed inside the script. A caller cannot redirect the write.
@@ -133,19 +131,45 @@ Nothing is granted permanently. pkexec uses the stock
 `org.freedesktop.policykit.exec` action, which is `auth_admin`, so **every toggle
 authenticates**. There is no sudoers entry and no passwordless rule.
 
-If you would rather not type the password on every click, there is an opt-in:
+### Caching the authorisation
+
+If you would rather not authenticate on every click, copy the example rules file
+into place:
 
 ```bash
+cd ~/.config/omarchy/plugins/io.github.justfortheloveof.power-lenovo-battery-conservation
 sudo cp policy/lenovo-power-conservation.rules.example \
      /etc/polkit-1/rules.d/50-lenovo-power-conservation.rules
 omarchy-restart-shell
 ```
 
 It only turns `AUTH_ADMIN` into `AUTH_ADMIN_KEEP` for one exact command line,
-`.../conservation set <0|1>`, on a local session, for members of `wheel`. Nothing
-else on the system changes, and deleting the file undoes it. `install.sh` does
-not copy it in for you, on purpose: nothing should persist in your system's
-authorisation policy unless you asked for it.
+`.../conservation set <0|1>`, on a local session, for members of `wheel`.
+Nothing else on the system changes, and deleting the file undoes it.
+`install.sh` does not copy it in for you, on purpose: nothing should persist in
+your system's authorisation policy unless you asked for it.
+
+### What lands on disk, and how to remove it
+
+`install.sh` installs exactly one file:
+
+```
+/usr/local/libexec/lenovo-power/conservation    root:root, mode 0755
+```
+
+Reading the mode fails until that file exists, because reading goes through the
+same helper: the row says a setup step is needed and the toggle stays disabled.
+Once it is installed, reading is silent and needs no password; only writing
+prompts.
+
+To remove it again, `sudo ./uninstall.sh`, or simply delete the file, since it
+keeps no state. `omarchy plugin remove` does **not** remove it: that only knows
+about files under `~/.config/omarchy/plugins`.
+
+Both the helper and the optional rules file carry their source repository and
+licence in their header, so anything installed on your system says where it came
+from and how to remove it.
+
 
 ## Development
 
