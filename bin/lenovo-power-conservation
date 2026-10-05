@@ -1,0 +1,152 @@
+#!/bin/bash
+#
+# lenovo-power-conservation: read or set Lenovo battery conservation mode.
+#
+# This is the only part of the plugin that ever runs as root. install.sh puts
+# this file at /usr/local/libexec/lenovo-power/conservation, owned by root and
+# not writable by anyone else, and that installed copy is the only thing this
+# plugin ever asks to be elevated.
+#
+# What makes that worth doing is what this script does *not* accept. It takes no
+# path from its caller: it resolves the kernel attribute itself, from a glob
+# fixed below. And it writes only the two values the attribute can hold. So a
+# caller who has reached this point, even a caller who has rewritten every file
+# in the plugin's directory, can cause exactly one of two writes to one firmware
+# attribute. That is the whole trust boundary.
+#
+# Nothing here re-executes itself. `set` requires already being root, so there
+# is no path by which a copy sitting in a user-writable directory elevates
+# itself; the caller has to name the installed path to pkexec deliberately.
+#
+# Usage:
+#   lenovo-power-conservation status
+#   pkexec /usr/local/libexec/lenovo-power/conservation set <0|1>
+
+set -euo pipefail
+
+# Marker used by uninstall.sh to confirm the file it is about to remove really
+# is ours and not something else that happens to sit at this path.
+readonly MARKER='lenovo-power-conservation: installed by the omarchy lenovo-power plugin'
+
+# The installed copy, named only for error messages. Never used to run anything.
+readonly PACKAGED_PATH=/usr/local/libexec/lenovo-power/conservation
+
+# The kernel attribute. Fixed here, never assembled from caller input.
+readonly ATTR_GLOB='/sys/bus/platform/drivers/ideapad_acpi/*/conservation_mode'
+
+# Distinct exit codes so a caller can tell the cases apart without parsing text.
+readonly EXIT_OK=0
+readonly EXIT_ERROR=1
+readonly EXIT_USAGE=2
+readonly EXIT_UNSUPPORTED=3
+readonly EXIT_UNKNOWN=4
+
+# pkexec sanitises the environment, but pin PATH and the locale anyway so that a
+# direct root invocation cannot resolve a helper out of a writable directory and
+# so validation does not shift with an inherited locale. Same reasoning as
+# omarchy-dns.
+if ((EUID == 0)); then
+	export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+	export LC_ALL=C.UTF-8
+fi
+
+die() {
+	printf '%s: %s\n' "${0##*/}" "$1" >&2
+	exit "$2"
+}
+
+# Print the attribute's path, or fail if this machine does not have one. This is
+# the only place a path enters the script.
+attr_path() {
+	local path
+	# Intentional word splitting: ATTR_GLOB is a glob.
+	# shellcheck disable=SC2086
+	for path in $ATTR_GLOB; do
+		[[ -f $path ]] || continue
+		printf '%s\n' "$path"
+		return 0
+	done
+	return 1
+}
+
+# Read the current value. Unprivileged: the attribute is world-readable.
+cmd_status() {
+	local path raw
+
+	path=$(attr_path) || {
+		printf 'unsupported\n'
+		return "$EXIT_UNSUPPORTED"
+	}
+
+	raw=$(cat -- "$path" 2>/dev/null) ||
+		die "cannot read $path" "$EXIT_ERROR"
+
+	case $raw in
+	1)
+		printf '1\n'
+		return "$EXIT_OK"
+		;;
+	0)
+		printf '0\n'
+		return "$EXIT_OK"
+		;;
+	*)
+		# Present but unrecognised. Not the same as off, and deliberately not
+		# reported as off: a caller that cannot read the state should not
+		# conclude anything about it.
+		printf 'unknown\n'
+		return "$EXIT_UNKNOWN"
+		;;
+	esac
+}
+
+# Write the value. Requires already being root.
+cmd_set() {
+	local value=$1 path confirm
+
+	# The entire validation surface: one argument, exactly "0" or "1". Anything
+	# else is refused before a path is resolved or a byte is written.
+	case $value in
+	0 | 1) ;;
+	*) die "refusing to write '$value': expected exactly 0 or 1" "$EXIT_USAGE" ;;
+	esac
+
+	if ((EUID != 0)); then
+		die "setting conservation mode needs root. Run: pkexec $PACKAGED_PATH set $value" "$EXIT_USAGE"
+	fi
+
+	path=$(attr_path) ||
+		die "no conservation_mode attribute found; this is not a supported Lenovo" "$EXIT_UNSUPPORTED"
+
+	printf '%s' "$value" >"$path" ||
+		die "failed writing $path" "$EXIT_ERROR"
+
+	# Read it back rather than reporting success on the strength of a write that
+	# returned zero. The kernel is free to reject a value.
+	confirm=$(cat -- "$path" 2>/dev/null) ||
+		die "wrote $path but cannot read it back" "$EXIT_ERROR"
+
+	if [[ $confirm != "$value" ]]; then
+		die "wrote '$value' to $path but it reads '$confirm'" "$EXIT_ERROR"
+	fi
+
+	printf '%s\n' "$value"
+}
+
+main() {
+	case ${1-} in
+	status)
+		(($# == 1)) || die "status takes no arguments" "$EXIT_USAGE"
+		cmd_status
+		;;
+	set)
+		(($# == 2)) || die "set takes exactly one argument, 0 or 1" "$EXIT_USAGE"
+		cmd_set "$2"
+		;;
+	*)
+		die "usage: ${0##*/} status | ${0##*/} set <0|1>" "$EXIT_USAGE"
+		;;
+	esac
+}
+
+main "$@"

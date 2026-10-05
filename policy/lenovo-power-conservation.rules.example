@@ -1,0 +1,39 @@
+// Optional: cache the polkit authorisation for the Lenovo battery conservation
+// helper, so a burst of toggles asks for your password once instead of once per
+// click.
+//
+// This file is NOT installed by install.sh, and nothing needs it. Without it
+// every toggle authenticates, because pkexec uses the stock
+// org.freedesktop.policykit.exec action and that is `auth_admin`, not
+// `auth_admin_keep`. Copy it in only if you would rather not type the password
+// on every click:
+//
+//   sudo cp policy/lenovo-power-conservation.rules.example \
+//        /etc/polkit-1/rules.d/50-lenovo-power-conservation.rules
+//   omarchy-restart-shell
+//
+// And to undo that, delete the file. That is the point: an authorisation cached
+// this way is scoped to one action id and one exact command line, and removing
+// the file removes it. Nothing here is permanent and nothing is passwordless.
+//
+// What it deliberately does not do is grant anything by itself. It only turns
+// AUTH_ADMIN into AUTH_ADMIN_KEEP for commands that are already the installed
+// helper; every other program on the system keeps the stock policy and still
+// prompts.
+
+polkit.addRule(function (action, subject) {
+  if (action.id !== "org.freedesktop.policykit.exec") return;
+
+  // pkexec reports what it was asked to run. Match only our helper, and only
+  // the one write it is allowed to perform.
+  var command = action.lookup("command_line");
+  if (typeof command !== "string") return;
+  if (!/^\/usr\/local\/libexec\/lenovo-power\/conservation set [01]$/.test(command)) return;
+
+  // Local session, and an administrator authenticating it. `subject.local`
+  // keeps a grant made at this machine from being honoured over ssh.
+  if (!subject.local) return;
+  if (!subject.isInGroup("wheel")) return;
+
+  return polkit.Result.AUTH_ADMIN_KEEP;
+});

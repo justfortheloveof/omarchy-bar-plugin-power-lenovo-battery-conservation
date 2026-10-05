@@ -8,7 +8,7 @@ machine that spends its life plugged in.
 
 `Panel.qml` and `Model.js` are currently byte-identical to the upstream commit
 pinned in `upstream.lock`. `manifest.json` is the only file this fork changes
-from upstream; `Conservation.js` and `tests/` are new.
+from upstream; `Conservation.js`, `bin/`, `policy/` and `tests/` are new.
 
 ## How this relates to upstream
 
@@ -89,11 +89,83 @@ readable:
 Do not reformat `Model.js` unless a feature needs it. Upstream tests it in
 `test/shell.d/power-test.sh`, so churn there makes future merges noisy.
 
+## Privileged setup
+
+Reading the current mode needs no privilege: `conservation_mode` is
+world-readable. Changing it does, because it is owned by root. One command,
+once, puts a root-owned helper in place:
+
+```bash
+sudo ./install.sh
+```
+
+That installs exactly one file:
+
+```
+/usr/local/libexec/lenovo-power/conservation    root:root, mode 0755
+```
+
+Until it is run, the panel reads the real state and every toggle is refused
+with a message saying so. To remove it again, `sudo ./uninstall.sh`.
+`omarchy plugin remove` does not: that only knows about files under
+`~/.config/omarchy/plugins`.
+
+### Why it is built this way
+
+The installed copy is the only thing this plugin ever asks to be elevated, and
+it is deliberately hard to turn into anything else:
+
+- **It takes no path from its caller.** It resolves the kernel attribute
+  itself, from a glob fixed inside the script. A caller cannot redirect the
+  write.
+- **It writes only `0` or `1`.** Everything else is refused before a path is
+  resolved or a byte is written.
+- **It never re-executes itself.** `set` requires already being root, so a copy
+  in a user-writable directory cannot elevate itself. Somebody has to name the
+  installed path to `pkexec` on purpose.
+- **It reads the attribute back** after writing and fails if the kernel did not
+  keep the value, rather than reporting success on the strength of a `write`
+  that returned zero.
+
+So a compromised plugin directory buys an attacker exactly two possible writes
+to one firmware attribute. That is the whole trust boundary, and it is narrow
+enough to state.
+
+`install.sh` reads that helper from the plugin directory, which is
+user-writable. That is deliberate: at install time you are trusting the
+repository you chose to run. The boundary that matters is at toggle time, and
+from then on the root-owned copy is what runs.
+
+### Why polkit and not sudo
+
+Because a bar panel is not a terminal. `sudo` needs a tty to prompt on, so from
+a panel it cannot ask you anything. `pkexec` hands the question to polkit, which
+hands it to the agent inside `omarchy-shell`, so the prompt is the themed
+Omarchy dialog. This is the same reasoning `omarchy-dns` uses when it falls
+through to `pkexec`.
+
+Nothing is granted permanently. pkexec uses the stock
+`org.freedesktop.policykit.exec` action, which is `auth_admin`, so **every
+toggle authenticates**. There is no sudoers entry and no passwordless rule.
+
+If you would rather not type the password on every click, there is an opt-in:
+
+```bash
+sudo cp policy/lenovo-power-conservation.rules.example \
+     /etc/polkit-1/rules.d/50-lenovo-power-conservation.rules
+omarchy-restart-shell
+```
+
+It only turns `AUTH_ADMIN` into `AUTH_ADMIN_KEEP` for one exact command line,
+`.../conservation set <0|1>`, on a local session, for members of `wheel`.
+Nothing else on the system changes, and deleting the file undoes it.
+
 ## Install
 
 ```bash
 omarchy plugin add https://github.com/justfortheloveof/omarchy-bar-plugin-power-lenovo-battery-conservation.git --enable
 omarchy-restart-shell
+sudo ./install.sh    # only needed to be able to change the mode, see above
 ```
 
 Source of truth is this directory. `omarchy plugin add` clones it into
@@ -104,6 +176,18 @@ never edit there.
 omarchy plugin update io.github.justfortheloveof.power-lenovo-battery-conservation --yes
 omarchy plugin remove io.github.justfortheloveof.power-lenovo-battery-conservation --yes   # restores the stock panel
 ```
+
+## Tests
+
+```bash
+node --test tests/conservation.test.cjs   # the logic
+node --test tests/helper.test.cjs         # the helper's arguments and writes
+```
+
+Neither suite needs root, a Lenovo, or anything in `/sys`. The helper's
+privileged path is exercised through `unshare -r`, which maps the caller to uid 0
+in a throwaway user namespace; the sysfs glob is rewritten to point at a
+temporary tree, so the host is untouched.
 
 ## License
 
