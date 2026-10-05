@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# Local check: everything CI runs, plus `omarchy plugin validate` and
+# `tools/sync-upstream --check`, which need an Omarchy box or an upstream
+# mirror. Any failing stage aborts with a non-zero exit, and skipped stages are
+# listed, so a pending tree is never reported as "all green".
+set -euo pipefail
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$root"
+
+skips=()
+
+skip() {
+	printf 'skip: %s\n' "$1"
+	skips+=("$1")
+}
+
+# ---------------------------------------------------------------------------
+# CI-equivalent stages (must run anywhere, no cwd dependence).
+# ---------------------------------------------------------------------------
+# One file per invocation: `bash -n a b c` parses a and treats b and c as
+# arguments to it, so only the first would ever be checked.
+for script in bin/lenovo-power-conservation install.sh uninstall.sh tools/sync-upstream bin/check bin/check-agent-files; do
+	bash -n "$script"
+done
+bin/check-agent-files "$root"
+python3 -c 'import json; json.load(open("manifest.json"))'
+node --test tests/conservation.test.cjs tests/helper.test.cjs
+
+# ---------------------------------------------------------------------------
+# Model.js must stay byte-identical to upstream. The README says it is
+# unchanged, and every line this fork added to it would be a line that can
+# conflict when upstream edits the same file. Upstream also tests it in
+# test/shell.d/power-test.sh, so churn there is noise for them too.
+#
+# Only checks against the mirror if tools/sync-upstream has already created
+# one, so this stays offline-safe.
+# ---------------------------------------------------------------------------
+pinned=$(sed -n 's/^sha=//p' upstream.lock)
+mirror=${OMARCHY_UPSTREAM_MIRROR:-${TMPDIR:-/tmp}/omarchy-power-lenovo-battery-conservation-upstream.git}
+upstream_path=shell/plugins/panels/power
+
+if [ -d "$mirror" ] && git --git-dir="$mirror" cat-file -e "${pinned}^{commit}" 2>/dev/null; then
+	if git --git-dir="$mirror" show "${pinned}:${upstream_path}/Model.js" | diff -q - Model.js >/dev/null; then
+		echo "Model.js: identical to upstream $pinned"
+	else
+		echo "Model.js has diverged from upstream ${pinned}." >&2
+		echo "It should not: the README calls it unchanged, and any edit there" >&2
+		echo "is a line that can conflict on the next sync." >&2
+		exit 1
+	fi
+else
+	skip "upstream mirror absent - not comparing Model.js (run tools/sync-upstream first)"
+fi
+
+# ---------------------------------------------------------------------------
+# qmllint, on its exit status rather than on its output.
+#
+# qmllint reports everything as `Warning: ... [category]`, including a fatal
+# syntax error, so grepping for `Error` finds nothing and gates on warning
+# count fails upstream's own file, which produces dozens on this box. The exit
+# code is the real signal: 0 when the file parses, 255 when it does not.
+#
+# `import qs.Commons` resolves through a qs -> <shell dir> mapping that only
+# exists on an Omarchy box. Without it the import warnings are expected, and
+# they do not affect the exit code.
+# ---------------------------------------------------------------------------
+qmllint=$(command -v qmllint || true)
+if [ -n "$qmllint" ]; then
+	lint_args=()
+	if [ -d /usr/share/omarchy/shell ]; then
+		qsimport=$(mktemp -d)
+		ln -s /usr/share/omarchy/shell "$qsimport/qs"
+		lint_args=(-I "$qsimport")
+	fi
+
+	lint_output=$("$qmllint" "${lint_args[@]}" Panel.qml 2>&1) && lint_status=0 || lint_status=$?
+	[ -n "${qsimport:-}" ] && rm -rf "$qsimport"
+
+	if [ "$lint_status" -ne 0 ]; then
+		echo "Panel.qml does not parse (qmllint exit $lint_status):" >&2
+		grep -B1 -A3 '\[syntax\]' <<<"$lint_output" >&2 || echo "$lint_output" >&2
+		exit 1
+	fi
+	echo "Panel.qml: parses (qmllint exit 0)"
+else
+	skip "qmllint not found - not linting Panel.qml"
+fi
+
+# ---------------------------------------------------------------------------
+# Manifest validation against the marketplace schema.
+# ---------------------------------------------------------------------------
+if command -v omarchy >/dev/null 2>&1 && [ -d /usr/share/omarchy ]; then
+	omarchy plugin validate "$root"
+else
+	skip "omarchy not found - not validating the manifest (local machine only)"
+fi
+
+# ---------------------------------------------------------------------------
+# Report where this fork sits against upstream. Never gates: there is nothing
+# to fail, it is only ever information.
+# ---------------------------------------------------------------------------
+if [ -x tools/sync-upstream ]; then
+	echo
+	tools/sync-upstream --check || true
+fi
+
+# ---------------------------------------------------------------------------
+# Summary. A truly green run means zero skips.
+# ---------------------------------------------------------------------------
+if [ ${#skips[@]} -ne 0 ]; then
+	printf 'bin/check: green with %d skip(s):\n' "${#skips[@]}"
+	printf '  %s\n' "${skips[@]}"
+else
+	echo "bin/check: all green"
+fi

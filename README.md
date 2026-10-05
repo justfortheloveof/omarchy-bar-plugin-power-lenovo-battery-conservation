@@ -99,8 +99,11 @@ world-readable. Changing it does, because it is owned by root. One command,
 once, puts a root-owned helper in place:
 
 ```bash
-sudo ./install.sh
+sudo ~/.config/omarchy/plugins/io.github.justfortheloveof.power-lenovo-battery-conservation/install.sh
 ```
+
+`install.sh` finds its own directory, so the absolute path works from anywhere.
+From a clone of this repository, `cd` there and use `sudo ./install.sh`.
 
 That installs exactly one file:
 
@@ -108,8 +111,10 @@ That installs exactly one file:
 /usr/local/libexec/lenovo-power/conservation    root:root, mode 0755
 ```
 
-Until it is run, the panel reads the real state and every toggle is refused
-with a message saying so. To remove it again, `sudo ./uninstall.sh`.
+Until it is run the panel cannot read the attribute at all, because reading
+goes through the same helper: the row says a setup step is needed and the
+toggle stays disabled. Once it is installed, reading is silent and needs no
+password; only writing prompts. To remove it again, `sudo ./uninstall.sh`.
 `omarchy plugin remove` does not: that only knows about files under
 `~/.config/omarchy/plugins`.
 
@@ -196,7 +201,12 @@ moment later for the truth.
 ```bash
 omarchy plugin add https://github.com/justfortheloveof/omarchy-bar-plugin-power-lenovo-battery-conservation.git --enable
 omarchy-restart-shell
-sudo ./install.sh    # only needed to be able to change the mode, see above
+```
+
+Only needed to be able to *change* the mode, not to read it:
+
+```bash
+sudo ~/.config/omarchy/plugins/io.github.justfortheloveof.power-lenovo-battery-conservation/install.sh
 ```
 
 Source of truth is this directory. `omarchy plugin add` clones it into

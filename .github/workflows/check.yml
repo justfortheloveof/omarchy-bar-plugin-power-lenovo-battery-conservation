@@ -1,0 +1,48 @@
+# Everything bin/check runs locally, minus the stages that need an Omarchy box.
+#
+# The Qt tools install is best-effort. If it fails, or if qmllint lands somewhere
+# not on PATH, bin/check skips the lint stage and says so rather than failing the
+# run. A skipped stage is not a green stage, which is why bin/check prints the
+# count.
+name: check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # qmllint, for the Panel.qml parse check. Ubuntu does not put Qt's bin
+      # directory on PATH, so point at it when the install worked.
+      - name: Install Qt tools
+        id: qt
+        continue-on-error: true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt6-declarative-dev-tools
+          for d in /usr/lib/qt6/bin /usr/lib/x86_64-linux-gnu/qt6/bin; do
+            if [ -x "$d/qmllint" ]; then
+              echo "QML_BIN=$d" >> "$GITHUB_ENV"
+              break
+            fi
+          done
+
+      - name: bin/check
+        run: |
+          if [ -n "${QML_BIN:-}" ]; then
+            echo "$QML_BIN" >> "$GITHUB_PATH"
+          fi
+          bin/check
+
+      # CI has no Omarchy, so the manifest stage and the Model.js comparison
+      # against the upstream mirror are always skipped here. Both still run for
+      # anyone who clones the repo on an Omarchy box. bin/check lists them in its
+      # summary, so a run that skipped something never reads as fully green.
