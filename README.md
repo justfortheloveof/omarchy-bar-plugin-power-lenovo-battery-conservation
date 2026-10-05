@@ -1,10 +1,10 @@
 # Power - Lenovo Battery Conservation
 
-The first-party power panel - battery icon, charge bar, cycle count, power
-profile picker - forked to add Lenovo's battery conservation mode: the
-`ideapad_acpi` driver's `conservation_mode` setting, which stops charging around
-80% instead of 100% and slows long-term battery wear on a machine that spends its
-life plugged in. It is the same feature Lenovo Vantage exposes on Windows.
+The Omarchy Quattro first-party power panel - battery icon, charge bar,
+cycle count, power profile picker - forked to add Lenovo's battery conservation
+mode (tested on a ThinkBook 13x G2 IAP) the `ideapad_acpi` driver's
+`conservation_mode` setting, which stops charging around 80% instead of 100% and
+slows long-term battery wear on a machine that spends its life plugged in.
 
 ## What it does
 
@@ -34,7 +34,7 @@ off switch. Each state therefore says in words whether that off is a fact or a
 guess.
 
 | Row shows | Switch | Means |
-|---|---|---|
+| --- | --- | --- |
 | the real value, enabled | reflects reality | the attribute was read; clicking asks for your password |
 | `Current mode unknown. Run sudo ./install.sh...` | off, but a guess | the helper is not installed, so the mode cannot be read at all |
 | `No Lenovo conservation_mode attribute here...` | off, and accurate | not an IdeaPad; the mode does not exist here |
@@ -188,7 +188,7 @@ members that the shell provides, so panel code from a newer omarchy can
 reference API this machine does not have:
 
 | upstream commit | what `Panel.qml` gained | what happens on an older omarchy |
-|---|---|---|
+| --- | --- | --- |
 | `c231097d` | `ShellIpc`, plus its `qmldir` entry | `ShellIpc is not a type`; the widget never loads and the bar slot is simply empty |
 | `b18ab495` | `Style.duration()`, `Style.reduceMotion` | `Style` exists, so these fail as missing members |
 
@@ -283,7 +283,7 @@ skips.
 ### Where things live
 
 | Path | |
-|---|---|
+| --- | --- |
 | `Panel.qml` | the forked power panel: installed upstream plus our additions |
 | `Model.js` | upstream, unchanged, and must stay that way |
 | `Conservation.js` | pure logic turning the helper's output into panel state |
