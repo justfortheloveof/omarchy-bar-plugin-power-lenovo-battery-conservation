@@ -35,9 +35,13 @@ Panel {
   readonly property bool conservationReady:
     conservationInstalled && conservationSupported && conservationKnown && !conservationBusy
   readonly property string conservationDescription: {
-    if (!conservationInstalled) return "Run sudo ./install.sh in the plugin directory to enable changes."
-    if (!conservationSupported) return "This machine has no Lenovo conservation_mode attribute."
-    if (!conservationKnown) return "Could not read the current value."
+    // Each not-ready state has to say whether the switch's "off" is a fact or a
+    // guess. Toggle has no indeterminate state, its track is a private id, and
+    // `checked` is a bool, so a disabled row still renders as a normal off
+    // switch. The text is the only place that distinction can live.
+    if (!conservationInstalled) return "Current mode unknown. Run sudo ./install.sh in the plugin directory to enable changes."
+    if (!conservationSupported) return "No Lenovo conservation_mode attribute here, so conservation mode is always off."
+    if (!conservationKnown) return "Current mode unknown: the attribute reported a value this plugin does not recognise."
     return "Stop charging around 80% to reduce long-term wear."
   }
   readonly property bool showPercentage: setting("showPercentage", false) === true

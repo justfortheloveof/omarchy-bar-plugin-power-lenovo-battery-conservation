@@ -191,16 +191,21 @@ Nothing else on the system changes, and deleting the file undoes it.
 Open the Power panel from the battery icon in the bar. Under **POWER PROFILE**
 there is now a **BATTERY CONSERVATION** section with one toggle.
 
-The row tells you which state you are in, and says so rather than guessing:
+The row tells you which state you are in. What it cannot do is make the switch
+look unknown: `Toggle` has no indeterminate state, its track is a private id, and
+`checked` is a bool, so a row that cannot be read still renders as a normal off
+switch. So each state says in words whether that off is a fact or a guess.
 
-| Row shows | Means |
-|---|---|
-| toggle, enabled | the attribute was read; clicking asks for your password |
-| `Run sudo ./install.sh...` | the helper is not installed, so changes are impossible |
-| `This machine has no Lenovo conservation_mode attribute.` | not an IdeaPad; nothing to do |
-| `Could not read the current value.` | the attribute exists but reports something unexpected, so the toggle stays disabled |
+| Row shows | Switch | Means |
+|---|---|---|
+| the real value, enabled | reflects reality | the attribute was read; clicking asks for your password |
+| `Current mode unknown. Run sudo ./install.sh...` | off, but a guess | the helper is not installed, so the mode cannot be read at all |
+| `No Lenovo conservation_mode attribute here...` | off, and accurate | not an IdeaPad; the mode does not exist here |
+| `Current mode unknown: the attribute reported...` | off, but a guess | the attribute exists but reports something this plugin does not know |
 
-Reading is silent and never prompts. Only writing prompts.
+A switch reading off while the row calls the mode unknown is the intended
+behaviour, not a bug: it is the honest combination available from this
+component. Reading is silent and never prompts; only writing prompts.
 
 From a keybinding or a script, over `omarchy-shell`:
 
