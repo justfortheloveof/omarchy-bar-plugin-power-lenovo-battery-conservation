@@ -13,6 +13,7 @@ spends its life plugged in.
 - Adds a "Conservation mode" toggle to the Omarchy Quattro default power bar plugin
 - Shows "Conservation mode" status
 - Toggles "Conservation mode" on/off
+- Notifies on failure
 
 ## CLI Usage
 
@@ -31,13 +32,13 @@ an answer, not a fault, so it raises nothing. Any other failure does raise a
 notification. Either way the panel re-reads the attribute when the write
 finishes, so the row catches up by itself.
 
-### Reading the row
+## Toggle UI Description
 
-The row under **BATTERY CONSERVATION** always tells you the current mode in
-words, and the switch beside it shows on or off. When the plugin cannot read the
-mode, it says so, because the switch has no third position to show it in. So a
-switch reading **off** next to a row calling the mode **unknown** means "not
-read", not "off" - read the sentence, not the switch.
+The current mode in is always displayed in words, and the switch beside it shows
+on or off. When the plugin cannot read the mode, it says so, because the switch
+has no third position to show it in. A switch reading **off** next to a row
+calling the mode **unknown** means "not read", not "off" - read the sentence,
+not the switch.
 
 | The row says | Switch | What is going on |
 | --- | --- | --- |
