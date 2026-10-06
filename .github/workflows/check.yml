@@ -35,6 +35,21 @@ jobs:
             fi
           done
 
+      # The helper tests fake root with `unshare -r`. Ubuntu 24.04 sets
+      # kernel.apparmor_restrict_unprivileged_userns=1 and ships no AppArmor
+      # profile for unshare, so the unshare itself fails with "Operation not
+      # permitted" and exits 1 (LP #2046477) - which would leave the privileged
+      # half of the helper untested while looking like six assertion failures.
+      # This relaxes AppArmor in this ephemeral runner and nothing else.
+      #
+      # The `unshare -r true` is the part that matters: do not assume the
+      # sysctl took. If a future runner image blocks this again, fail here at a
+      # named step rather than quietly running fewer tests.
+      - name: Allow `unshare -r` for the helper tests
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          unshare -r true
+
       - name: bin/check
         run: |
           if [ -n "${QML_BIN:-}" ]; then

@@ -19,6 +19,32 @@ const { spawnSync } = require("node:child_process");
 
 const HELPER = path.join(__dirname, "..", "bin", "lenovo-power-conservation");
 
+// `unshare -r` is how this file fakes root. Probe it once, up front, and keep
+// the answer.
+//
+// Without this, a host that forbids unprivileged user namespaces fails every
+// asRoot assertion below by handing back *unshare's* exit code. unshare exits 1,
+// so `set 2` - which the helper refuses at its argument check, before it ever
+// looks at EUID - reports 1 instead of 2. That reads as a helper bug rather than
+// a missing namespace, and it is exactly how CI went red with six misleading
+// diffs and no mention of unshare.
+//
+// Ubuntu 24.04 sets kernel.apparmor_restrict_unprivileged_userns=1 and ships no
+// AppArmor profile for unshare, so the unshare itself is refused with
+// "Operation not permitted" (LP #2046477).
+const ROOT_SIM = (() => {
+  const probe = spawnSync("unshare", ["-r", "true"], { encoding: "utf8" });
+
+  if (probe.error) {
+    return { ok: false, why: `unshare could not be run (${probe.error.code || probe.error.message})` };
+  }
+  if (probe.status !== 0) {
+    const detail = probe.stderr.trim().replace(/\s*\n\s*/g, "; ") || "no output";
+    return { ok: false, why: `\`unshare -r true\` exited ${probe.status}: ${detail}` };
+  }
+  return { ok: true };
+})();
+
 // Build a helper wired to a throwaway "sysfs" and report back a runner.
 //
 // `value` seeds the fake attribute; pass undefined to leave it absent.
@@ -45,6 +71,20 @@ function harness({ value } = {}) {
   fs.writeFileSync(script, rewritten, { mode: 0o755 });
 
   const run = (args, { asRoot = false } = {}) => {
+    // Fail here, with the remedy, rather than letting unshare's exit code
+    // masquerade as the helper's. Deliberately not a throw at module scope:
+    // the tests that need no root are still worth running, and still passing.
+    if (asRoot && !ROOT_SIM.ok) {
+      throw new Error(
+        `root simulation unavailable, so the helper's privileged branch cannot be ` +
+          `exercised: ${ROOT_SIM.why}\n` +
+          `These six tests are the only coverage of the write path; this is a ` +
+          `broken test environment, not a helper failure.\n` +
+          `On Ubuntu 24.04+:\n` +
+          `  sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`
+      );
+    }
+
     // The rewritten copy, not HELPER: the real one reads the real /sys.
     const res = asRoot
       ? spawnSync("unshare", ["-r", script, ...args], { encoding: "utf8" })
@@ -186,7 +226,11 @@ test("an unknown subcommand is refused", () => {
 test("subcommands are case sensitive and take no flags", () => {
   const { run } = harness({ value: "0" });
   for (const args of [["--status"], ["status", "--json"], ["set", "--", "1"]]) {
-    assert.equal(run(args, { asRoot: true }).code, 2, `${JSON.stringify(args)}`);
+    assert.equal(
+      run(args, { asRoot: true }).code,
+      2,
+      `${args.map((a) => JSON.stringify(a)).join(" ") || "(no arguments)"} should be refused`
+    );
   }
 });
 
