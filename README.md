@@ -177,11 +177,14 @@ so ours is one more boolean in the same idiom, `conservationFocused`, meaning
 "the cursor is on our row instead of the profiles".
 
 - `h`/`l` and the left/right arrows move between profiles, unchanged.
-- `j`/`k` and up/down walk between the two rows.
+- `j`/`k` and up/down walk between the two rows, lighting exactly one row at a
+  time.
 - Return or Space activates whichever row the cursor is on.
-- Hovering a row moves the cursor there, so mouse and keyboard agree.
+- Hovering a row moves the cursor there. It cannot move the cursor *off* our row
+  first, so hovering a profile while the cursor sits on ours can briefly light
+  both, and `Return` still toggles conservation.
 
-Two deliberate differences from a stock panel:
+Three deliberate differences from a stock panel:
 
 - Upstream sends `j`/`k` into the profile list. Here they change rows, and only
   `h`/`l` move between profiles.
@@ -189,6 +192,11 @@ Two deliberate differences from a stock panel:
   or the mode has not been read - so the cursor cannot park on a toggle that
   would refuse to flip. The cost is that the row's "run `sudo ./install.sh`"
   message cannot be read with the keyboard alone.
+- Only keyboard navigation is exclusive. Cursor and hover are separate inputs in
+  the kit's `Button` and `Toggle`, so a profile lit by hover does not clear the
+  keyboard cursor. Left alone deliberately: making it exclusive costs a fourth
+  modified upstream line, and `profileIndex` is restored on the way back up
+  anyway.
 
 This is the one place where adding a feature meant changing upstream's code
 rather than only adding to it: the key dispatcher's `onMoveRequested` and
