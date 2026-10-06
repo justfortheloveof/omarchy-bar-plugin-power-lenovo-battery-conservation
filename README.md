@@ -21,11 +21,15 @@ omarchy-shell omarchy.power conservationStatus   # on, off, or unknown
 omarchy-shell omarchy.power toggleConservation   # prints the value it asked for
 ```
 
-`toggleConservation` returns `0` or `1`: the value it asked the kernel to write
-OR nothing if it declined.  
-It does not return the result: the password prompt means the write has not
-happened when it replies. Query `conservationStatus` again later for the updated
-status.
+`conservationStatus` answers from what the panel last read: free and instant.
+
+`toggleConservation` is asynchronous. It queues the write to a background process
+- the one that raises the dialog - and returns immediately, so its answer is the
+value it asked for, not the outcome: `0` or `1`, or nothing if it could not act.
+Dismiss the dialog and the mode is unchanged, quietly: that is an answer, not a
+fault, so it raises nothing. Any other failure does raise a notification. Either
+way the panel re-reads the attribute when the write finishes, so the row catches
+up by itself.
 
 ### Reading the row
 

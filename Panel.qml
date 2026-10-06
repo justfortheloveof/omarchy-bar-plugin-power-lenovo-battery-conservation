@@ -31,6 +31,9 @@ Panel {
   property bool conservationKnown: false
   property bool conservationActive: false
   property bool conservationBusy: false
+  // Held until the write process exits, because whether to say anything depends
+  // on an exit code we only learn at the end.
+  property var conservationErrors: []
   // Only a toggle whose current value we actually read may be flipped.
   readonly property bool conservationReady:
     conservationInstalled && conservationSupported && conservationKnown && !conservationBusy
@@ -307,24 +310,26 @@ Panel {
   Process {
     id: conservationAction
     stdout: SplitParser { onRead: function(line) { root.ingestConservationStatus(line) } }
-    // The helper reports why a write was refused; a failure here is a setup
-    // problem or a cancelled prompt, and both are worth saying out loud.
+    // Collected rather than announced on sight: whether to speak at all depends
+    // on the exit code, and Conservation.shouldNotify decides that.
     stderr: SplitParser {
-      onRead: function(line) {
-        var msg = String(line).trim()
-        if (msg.length > 0) {
-          Quickshell.execDetached([
-            "omarchy-notification-send",
-            "-g", "󰂅",
-            "Battery Conservation",
-            msg
-          ])
-        }
-      }
+      onRead: function(line) { root.conservationErrors.push(String(line)) }
     }
-    // Re-read rather than trust the write: the helper verifies it, but the
-    // state on screen should come from the attribute, not from what we asked for.
-    onExited: {
+    onExited: function(exitCode) {
+      var why = root.conservationErrors
+      root.conservationErrors = []
+
+      if (Conservation.shouldNotify(exitCode, why)) {
+        Quickshell.execDetached([
+          "omarchy-notification-send",
+          "-g", "󰂅",
+          "Battery Conservation",
+          why.filter(function(line) { return line.trim() !== "" }).join("\n")
+        ])
+      }
+
+      // Re-read rather than trust the write: the helper verifies it, but the
+      // state on screen should come from the attribute, not from what we asked for.
       root.conservationBusy = false
       root.refreshConservation()
     }

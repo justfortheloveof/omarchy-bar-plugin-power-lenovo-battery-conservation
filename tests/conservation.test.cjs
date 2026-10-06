@@ -6,7 +6,7 @@ const vm = require("node:vm");
 
 const ctx = vm.createContext({});
 vm.runInContext(fs.readFileSync(`${__dirname}/../Conservation.js`, "utf8"), ctx);
-const { statusWord, parseState, nextValue, isAcceptedValue, describe } = ctx;
+const { statusWord, parseState, nextValue, isAcceptedValue, describe, shouldNotify } = ctx;
 
 // Exactly what bin/lenovo-power-conservation prints for `status`.
 const INSTALLED_ON = "1";
@@ -82,6 +82,38 @@ test("isAcceptedValue only ever admits what nextValue produces", () => {
     assert.equal(isAcceptedValue(nextValue(state)), true);
   }
   assert.equal(isAcceptedValue(nextValue(null)), false);
+});
+
+test("shouldNotify stays quiet when the user dismissed the dialog", () => {
+  // 126 is pkexec saying "nobody typed a password on purpose". The mode is
+  // unchanged and that was the user's choice, so a notification here would be
+  // scolding someone for changing their mind.
+  assert.equal(shouldNotify(126, [""]), false);
+  assert.equal(shouldNotify(126, ["something pkexec happened to print"]), false);
+  assert.equal(shouldNotify("126", ["nope"]), false, "the code may arrive as a string");
+});
+
+test("shouldNotify stays quiet on success", () => {
+  assert.equal(shouldNotify(0, []), false);
+  assert.equal(shouldNotify(0, ["warning: no such device"]), false, "stderr on success is not a failure");
+});
+
+test("shouldNotify speaks up for a real failure", () => {
+  assert.equal(shouldNotify(1, ["conservation: refusing to write '2'"]), true);
+  assert.equal(shouldNotify(127, ["command not found"]), true);
+});
+
+test("shouldNotify has nothing to say without an explanation", () => {
+  // A non-zero exit with no stderr gives us nothing to put in a notification,
+  // and inventing a message would be worse than staying quiet.
+  assert.equal(shouldNotify(1, []), false);
+  assert.equal(shouldNotify(1, ["", "   "]), false, "blank lines are not an explanation");
+  assert.equal(shouldNotify(1, undefined), false);
+  assert.equal(shouldNotify(1, "not an array"), false);
+});
+
+test("shouldNotify keeps the real explanation in a noisy stream", () => {
+  assert.equal(shouldNotify(1, ["", "conservation: no attribute found", ""]), true);
 });
 
 test("describe reports a working machine with the mode on or off", () => {

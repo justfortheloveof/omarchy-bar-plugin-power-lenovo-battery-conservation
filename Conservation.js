@@ -24,6 +24,30 @@ var UNKNOWN = "unknown"
 var VALUE_OFF = "0"
 var VALUE_ON = "1"
 
+// pkexec's exit code when the authentication dialog is dismissed without a
+// password. Worth naming: it is the one failure that is not a failure.
+var DISMISSED = 126
+
+// Whether a write that did not succeed is worth telling the user about.
+//
+// 126 means the dialog was dismissed. That is an answer, not a fault: nobody
+// typed a password on purpose, the mode is unchanged, and a notification would
+// be scolding someone for changing their mind. Any other non-zero exit is worth
+// a word, because the toggle looked like it worked and did not.
+//
+// `errors` is whatever the helper wrote to stderr, and nothing is announced
+// without it: a silent non-zero exit has no explanation to pass on.
+function shouldNotify(exitCode, errors) {
+  var code = Number(exitCode)
+  if (code === 0) return false
+  if (code === DISMISSED) return false
+
+  var lines = Array.isArray(errors) ? errors : []
+  return lines.some(function (line) {
+    return String(line || "").trim().length > 0
+  })
+}
+
 // Normalise whatever the helper printed into the single word we reason about.
 function statusWord(raw) {
   if (raw === null || raw === undefined) return ""
@@ -93,5 +117,6 @@ if (typeof module !== "undefined") {
     describe: describe,
     nextValue: nextValue,
     isAcceptedValue: isAcceptedValue,
+    shouldNotify: shouldNotify,
   };
 }
