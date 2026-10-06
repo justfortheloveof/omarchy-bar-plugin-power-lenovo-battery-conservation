@@ -609,23 +609,8 @@ Panel {
               }
             }
           }
-        }
 
-        // ---------- Lenovo battery conservation ----------
-        PanelSeparator {
-          foreground: root.bar.foreground
-        }
-
-        Column {
-          width: parent.width
-          spacing: Style.space(10)
-
-          PanelSectionHeader {
-            text: "BATTERY CONSERVATION"
-            foreground: root.bar.foreground
-            fontFamily: root.bar.fontFamily
-          }
-
+          // ---------- Lenovo battery conservation ----------
           Toggle {
             width: parent.width
             label: "Conservation Mode"

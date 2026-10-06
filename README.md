@@ -34,7 +34,10 @@ finishes, so the row catches up by itself.
 
 ## Toggle UI Description
 
-The current mode in is always displayed in words, and the switch beside it shows
+The Conservation Mode toggle sits under **POWER PROFILE**, below the profile
+buttons, in the same section rather than behind its own heading.
+
+The current mode is always displayed in words, and the switch beside it shows
 on or off. When the plugin cannot read the mode, it says so, because the switch
 has no third position to show it in. A switch reading **off** next to a row
 calling the mode **unknown** means "not read", not "off" - read the sentence,
