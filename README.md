@@ -1,5 +1,7 @@
 # Power - Lenovo Battery Conservation
 
+![preview](preview.png)
+
 Adds a Battery "conservation mode" toggle, for Lenovo laptops, to the
 Omarchy Quattro power bar plugin  
 (tested on a ThinkBook 13x G2 IAP)
