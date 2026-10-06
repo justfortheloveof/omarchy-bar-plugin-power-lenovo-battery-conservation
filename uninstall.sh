@@ -14,6 +14,12 @@ readonly PACKAGED_PATH="$PACKAGED_DIR/conservation"
 
 readonly RULES_PATH=/etc/polkit-1/rules.d/50-lenovo-power-conservation.rules
 
+# The rules file is a verbatim copy of the plugin's
+# policy/lenovo-power-conservation.rules.example, so this line is in it.
+# Checking it before a root-owned rm does two things at once: proves the file is
+# ours, and re-confirms its provenance while we are standing next to it.
+readonly RULES_MARKER='https://github.com/justfortheloveof/omarchy-bar-plugin-power-lenovo-battery-conservation'
+
 die() {
 	printf 'uninstall.sh: %s\n' "$1" >&2
 	exit 1
@@ -21,9 +27,15 @@ die() {
 
 ((EUID == 0)) || die "run this with sudo: sudo $0"
 
+# Recorded before anything is removed, so the closing line can say what this run
+# actually left behind rather than what happens to be on disk by then.
+helper_was_installed=0
+
 if [[ ! -e $PACKAGED_PATH ]]; then
 	printf 'Nothing installed at %s\n' "$PACKAGED_PATH"
 else
+	helper_was_installed=1
+
 	# Refuse to delete a file we cannot identify. The path is plugin-specific,
 	# but this is a root-owned rm and the check costs one grep.
 	if ! grep -qF 'lenovo-power-conservation: installed by' "$PACKAGED_PATH"; then
@@ -36,11 +48,40 @@ fi
 
 rmdir "$PACKAGED_DIR" 2>/dev/null && printf 'Removed %s\n' "$PACKAGED_DIR"
 
-# This script never installs the rules file, but the README offers it as an
-# option, so say if one is there.
+# The rules file is opt-in and install.sh never puts it there, so it is offered
+# rather than taken. Worth offering: left behind, it keeps a cached
+# authorisation pointing at a helper that is no longer there.
 if [[ -e $RULES_PATH ]]; then
-	printf '\nAlso present, and not ours to delete without a look:\n  %s\n' "$RULES_PATH"
-	printf 'Remove it yourself if you no longer want the authorisation cached.\n'
+	printf '\nAlso present:\n  %s\n' "$RULES_PATH"
+	printf 'It caches the authorisation for this helper. Remove it as well? [y/N] '
+
+	reply=""
+	if [[ -t 0 ]]; then
+		read -r reply || reply=""
+	else
+		# No terminal to ask on, so do not block waiting for an answer nobody
+		# can give. Same reasoning as omarchy-dns falling through to pkexec.
+		printf '\n'
+	fi
+
+	case ${reply,,} in
+	y | yes)
+		if grep -qF "$RULES_MARKER" "$RULES_PATH"; then
+			rm -f "$RULES_PATH"
+			printf 'Removed %s\n' "$RULES_PATH"
+			printf 'polkitd watches rules.d, so this applies without a restart.\n'
+		else
+			printf 'That file does not look like ours; leaving it alone.\n'
+		fi
+		;;
+	*)
+		printf 'Left in place. Remove it yourself with:\n  rm %s\n' "$RULES_PATH"
+		;;
+	esac
 fi
 
-printf '\nDone. The panel will now read the current mode but refuse to change it.\n'
+if ((helper_was_installed)); then
+	printf '\nDone. The panel will now read the current mode but refuse to change it.\n'
+else
+	printf '\nDone. Nothing was installed, so nothing is left behind.\n'
+fi

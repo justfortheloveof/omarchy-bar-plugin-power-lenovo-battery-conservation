@@ -284,3 +284,68 @@ test("install.sh points at the polkit option after installing", () => {
     "README should have a 'Caching the authorisation' heading for that link to land on"
   );
 });
+
+test("uninstall.sh offers the polkit rule instead of taking it", () => {
+  // The rule is opt-in, so it is as likely to be something the user wrote as a
+  // copy of ours. Ask, and verify identity before a root-owned rm - the same
+  // bargain install.sh makes about the helper.
+  const uninstall = fs.readFileSync(path.join(__dirname, "..", "uninstall.sh"), "utf8");
+  assert.match(uninstall, /read -r reply/, "should prompt");
+  assert.match(uninstall, /RULES_MARKER/, "should check the file is ours before removing it");
+  assert.match(uninstall, /\[y\/N\]/, "should default to leaving it alone");
+
+  const marker = uninstall.match(/^readonly RULES_MARKER='(.+)'$/m);
+  assert.ok(marker, "RULES_MARKER should be declared");
+  const example = fs.readFileSync(
+    path.join(__dirname, "..", "policy", "lenovo-power-conservation.rules.example"),
+    "utf8"
+  );
+  assert.ok(example.includes(marker[1]), "the marker must actually appear in the shipped example");
+});
+
+test("uninstall.sh does not hang when there is no terminal", () => {
+  // sudo from a script or a migration has no tty to ask on, and a prompt with
+  // nobody to answer it is worse than no prompt. omarchy-dns checks the same
+  // thing before falling through to pkexec.
+  const uninstall = fs.readFileSync(path.join(__dirname, "..", "uninstall.sh"), "utf8");
+  assert.match(uninstall, /\[\[ -t 0 \]\]/, "should only prompt on a terminal");
+});
+
+test("the README and uninstall.sh agree on the polkit rule path", () => {
+  const uninstall = fs.readFileSync(path.join(__dirname, "..", "uninstall.sh"), "utf8");
+  const declared = uninstall.match(/^readonly RULES_PATH=(\S+)$/m);
+  assert.ok(declared, "RULES_PATH should be declared");
+
+  const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8");
+  assert.ok(
+    readme.includes(declared[1]),
+    `README should name ${declared[1]} so users can find or remove the file themselves`
+  );
+});
+
+test("both README sections say uninstall.sh asks about the polkit rule", () => {
+  // Behaviour and documentation drift apart quietly. Scoped to the two
+  // passages that describe what is on the system, and the scope stops at the
+  // next heading of any level - a coarser one passes on whichever paragraph
+  // happens to keep the phrase.
+  const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8");
+  const passage = (heading) => {
+    const start = readme.search(new RegExp(`^#{1,6} ${heading}`, "m"));
+    assert.ok(start >= 0, `README should have a "${heading}" section`);
+    const rest = readme.slice(start);
+    const nl = rest.indexOf("\n");
+    if (nl < 0) return rest;
+    const end = rest.slice(nl + 1).search(/^#{1,6} /m);
+    return end < 0 ? rest : rest.slice(0, nl + 1 + end);
+  };
+
+  for (const heading of [
+    "Uninstalling / Removing",
+    "What lands on disk, and how to remove it",
+  ]) {
+    const body = passage(heading);
+    assert.match(body, /uninstall\.sh/, `${heading} should mention uninstall.sh`);
+    assert.match(body, /asks?\b/, `${heading} should say uninstall.sh asks about the rule`);
+    assert.match(body, /polkit rule|rules\.d/, `${heading} should name the polkit rule`);
+  }
+});

@@ -92,7 +92,23 @@ omarchy plugin update io.github.justfortheloveof.power-lenovo-battery-conservati
 
 ```bash
 omarchy plugin remove io.github.justfortheloveof.power-lenovo-battery-conservation --yes   # restores the stock panel
+sudo ./uninstall.sh
 ```
+
+The two are separate. `omarchy plugin remove` only knows about files under
+`~/.config/omarchy/plugins`, so it leaves the root-owned helper - and the polkit
+rule, if you added one - on the system. `uninstall.sh` takes both:
+
+```bash
+sudo ~/.config/omarchy/plugins/io.github.justfortheloveof.power-lenovo-battery-conservation/uninstall.sh
+```
+
+It removes the helper, and if it finds the optional polkit rule it asks before
+removing that too. Answer `y` and both go; anything else leaves the rule alone
+and prints the command to remove it yourself. It never removes a file it cannot
+identify as ours, so a polkit rule you wrote yourself at the same path is left
+alone. `polkitd` watches `rules.d`, so removing the rule takes effect without a
+restart.
 
 ## How the privileged part works
 
@@ -129,6 +145,19 @@ Reading the mode fails until that file exists, because reading goes through the
 same helper: the row says a setup step is needed and the toggle stays disabled.
 Once it is installed, reading is silent and needs no password; only writing
 prompts.
+
+There is a second file you may put on the system yourself, and
+`install.sh` never does it for you:
+
+```
+/etc/polkit-1/rules.d/50-lenovo-power-conservation.rules    only if you took the caching option
+```
+
+So `sudo ./uninstall.sh` deals with both: it removes the helper unconditionally,
+and offers you the polkit rule as well. It asks rather than assuming, because
+the rule is as likely to be something you wrote yourself as a copy of ours, and
+because leaving it behind keeps a cached authorisation pointing at a helper that
+is no longer there.
 
 To remove it again, `sudo ./uninstall.sh`, or simply delete the file, since it
 keeps no state. `omarchy plugin remove` does **not** remove it: that only knows
@@ -280,8 +309,8 @@ skips.
 | `Conservation.js` | pure logic turning the helper's output into panel state |
 | `manifest.json` | plugin id, `clonedFrom: omarchy.power` |
 | `bin/lenovo-power-conservation` | the only thing that runs as root |
-| `install.sh`, `uninstall.sh` | one-time privileged setup and its removal |
-| `policy/lenovo-power-conservation.rules.example` | optional polkit caching, never installed automatically |
+| `install.sh`, `uninstall.sh` | one-time privileged setup, and its removal; `uninstall.sh` also offers to remove the polkit rule |
+| `policy/lenovo-power-conservation.rules.example` | optional polkit caching, never installed automatically; copied by hand to `/etc/polkit-1/rules.d/50-lenovo-power-conservation.rules` |
 | `upstream.lock` | pinned merge base and fetch coordinates |
 | `tools/sync-upstream` | the three-way merge against upstream |
 | `tests/` | both suites |
