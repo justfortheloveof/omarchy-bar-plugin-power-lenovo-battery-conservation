@@ -6,7 +6,7 @@ const vm = require("node:vm");
 
 const ctx = vm.createContext({});
 vm.runInContext(fs.readFileSync(`${__dirname}/../Conservation.js`, "utf8"), ctx);
-const { statusWord, parseState, nextValue, isAcceptedValue, describe, shouldNotify } = ctx;
+const { statusWord, parseState, nextValue, isAcceptedValue, describe, shouldNotify, moveFocusRow, hoverClaimsFocus } = ctx;
 
 // Exactly what bin/lenovo-power-conservation prints for `status`.
 const INSTALLED_ON = "1";
@@ -180,4 +180,33 @@ test("the README quotes the row's strings verbatim", () => {
   for (const s of strings) {
     assert.ok(readme.includes(s), `README should quote verbatim: ${s}`);
   }
+});
+
+test("moveFocusRow walks between the profile row and ours", () => {
+  assert.equal(moveFocusRow(false, 1, true, true), true, "down lands on ours");
+  assert.equal(moveFocusRow(true, -1, true, true), false, "up returns to profiles");
+});
+
+test("moveFocusRow leaves the cursor at the end rather than wrapping", () => {
+  assert.equal(moveFocusRow(true, 1, true, true), true);
+  assert.equal(moveFocusRow(false, -1, true, true), false);
+});
+
+test("moveFocusRow ignores vertical moves when our row is unavailable", () => {
+  assert.equal(moveFocusRow(false, 1, false, true), false, "not installed");
+  assert.equal(moveFocusRow(true, -1, false, true), true, "stays put, no escape");
+});
+
+test("moveFocusRow reaches ours directly when there are no profiles", () => {
+  assert.equal(moveFocusRow(false, 1, true, false), true);
+});
+
+test("moveFocusRow ignores a zero delta", () => {
+  assert.equal(moveFocusRow(false, 0, true, true), false);
+  assert.equal(moveFocusRow(true, 0, true, true), true);
+});
+
+test("hoverClaimsFocus follows whether the row could be activated", () => {
+  assert.equal(hoverClaimsFocus(true), true);
+  assert.equal(hoverClaimsFocus(false), false);
 });

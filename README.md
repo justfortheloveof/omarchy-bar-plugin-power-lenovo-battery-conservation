@@ -169,6 +169,34 @@ from and how to remove it.
 Everything below is for working on the plugin. If you only want to use it, you
 are already done above.
 
+### Keyboard navigation
+
+The panel's keyboard cursor is upstream's own: `cursorActive` plus a flat
+`profileIndex` into the profile buttons. We extend that rather than replace it,
+so ours is one more boolean in the same idiom, `conservationFocused`, meaning
+"the cursor is on our row instead of the profiles".
+
+- `h`/`l` and the left/right arrows move between profiles, unchanged.
+- `j`/`k` and up/down walk between the two rows.
+- Return or Space activates whichever row the cursor is on.
+- Hovering a row moves the cursor there, so mouse and keyboard agree.
+
+Two deliberate differences from a stock panel:
+
+- Upstream sends `j`/`k` into the profile list. Here they change rows, and only
+  `h`/`l` move between profiles.
+- Our row is skipped entirely while it cannot act - before `install.sh` has run,
+  or the mode has not been read - so the cursor cannot park on a toggle that
+  would refuse to flip. The cost is that the row's "run `sudo ./install.sh`"
+  message cannot be read with the keyboard alone.
+
+This is the one place where adding a feature meant changing upstream's code
+rather than only adding to it: the key dispatcher's `onMoveRequested` and
+`onActivateRequested`. Both now call one function of ours, and upstream's
+`selectProfileByDelta`, `activateSelectedProfile` and `setProfile` are untouched
+behind them. The rules in the next section apply to those two handlers from now
+on.
+
 ### Relationship to upstream
 
 `Panel.qml` and `Model.js` are a copy of `shell/plugins/panels/power/` from
@@ -262,8 +290,9 @@ readable:
 // ---------- Battery conservation ----------
 ```
 
-The only edit inside code upstream owns is two methods appended to the existing
-IPC handler. If you add another, append it after those.
+The only edits inside code upstream owns are two methods appended to the existing
+IPC handler, and the panel key dispatcher's two handlers. If you add another,
+append it after those.
 
 Do not reformat `Model.js` unless a feature needs it. Upstream tests it in
 `test/shell.d/power-test.sh`, so churn there makes future merges noisy.
@@ -303,7 +332,7 @@ skips.
 | --- | --- |
 | `Panel.qml` | the forked power panel: installed upstream plus our additions |
 | `Model.js` | upstream, unchanged, and must stay that way |
-| `Conservation.js` | pure logic turning the helper's output into panel state |
+| `Conservation.js` | pure logic for panel state and navigation: turning the helper's output into state, and moving the keyboard cursor between rows |
 | `manifest.json` | plugin id, `clonedFrom: omarchy.power` |
 | `bin/lenovo-power-conservation` | the only thing that runs as root |
 | `install.sh`, `uninstall.sh` | one-time privileged setup, and its removal; `uninstall.sh` also offers to remove the polkit rule |

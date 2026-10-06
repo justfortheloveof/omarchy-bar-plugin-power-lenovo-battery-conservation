@@ -110,6 +110,47 @@ function isAcceptedValue(value) {
   return value === VALUE_OFF || value === VALUE_ON;
 }
 
+// Which row the panel's cursor lands on for a vertical move.
+//
+// This panel has one focusable row of its own - the profile buttons - and ours
+// sits below it, so vertical movement alternates between them. There is no
+// section string to keep in sync: `focused` is simply "the cursor is on our row
+// rather than on the profiles", the same plain boolean the panel already uses
+// for cursorActive.
+//
+// `available` is the row being reachable at all. When the helper is missing, or
+// the mode has not been read, the row would refuse to do anything, so it is
+// left out of the walk rather than made into a cursor stop that fails.
+// `hasProfiles` says whether the profile row is there to move to; with no
+// profiles at all, the only vertical move lands on ours.
+//
+// Moving past either end stays put. Wrapping would silently change a profile
+// while the user is reaching for a toggle, and the panel's own profile index
+// does not wrap either - Model.clampIndex pins it.
+function moveFocusRow(focused, delta, available, hasProfiles) {
+  if (available !== true) return focused === true
+
+  // Down always lands on our row, which is the last thing below the profiles.
+  // With no profiles to start from there is nowhere else it could mean.
+  if (delta > 0) return true
+
+  // Up leaves our row for the profiles, and stops on ours when there are none,
+  // because descending to a row that is not on screen is not a move.
+  if (delta < 0) return hasProfiles === true ? false : true
+
+  return focused
+}
+
+// Whether the conservation row should claim the cursor when hovered.
+//
+// Hover is the mouse's way of saying "I am pointing at this row", so it moves
+// the cursor only when that row would also accept a keyboard activation.
+// Otherwise hovering a row that cannot be toggled would strand the cursor off
+// the profiles with nothing for Return to do.
+function hoverClaimsFocus(available) {
+  return available === true
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     statusWord: statusWord,
@@ -118,5 +159,7 @@ if (typeof module !== "undefined") {
     nextValue: nextValue,
     isAcceptedValue: isAcceptedValue,
     shouldNotify: shouldNotify,
+    moveFocusRow: moveFocusRow,
+    hoverClaimsFocus: hoverClaimsFocus,
   };
 }

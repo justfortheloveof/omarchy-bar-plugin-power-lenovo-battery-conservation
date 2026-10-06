@@ -34,6 +34,13 @@ Panel {
   // Held until the write process exits, because whether to say anything depends
   // on an exit code we only learn at the end.
   property var conservationErrors: []
+  // Keyboard/hover cursor state. The panel's own navigation is a flat profile
+  // index plus cursorActive, so ours is a plain boolean in the same idiom
+  // rather than a section name: true means the cursor is on our row instead of
+  // the profiles. A boolean rather than an index because updateProfiles
+  // re-clamps profileIndex through parseProfiles every refresh, which would
+  // pull a shared index off our row every five seconds.
+  property bool conservationFocused: false
   // Only a toggle whose current value we actually read may be flipped.
   readonly property bool conservationReady:
     conservationInstalled && conservationSupported && conservationKnown && !conservationBusy
@@ -118,6 +125,26 @@ Panel {
     conservationAction.command = ["pkexec", root.conservationHelper, "set", value]
     conservationAction.running = true
     return value
+  }
+
+  // Vertical navigation: walk between the profile row and ours, skipping our
+  // row when it is not ready. dx never reaches here, so left/right stay on the
+  // profiles exactly as upstream intends.
+  function moveFocusRow(delta) {
+    conservationFocused = Conservation.moveFocusRow(
+      conservationFocused,
+      delta,
+      root.conservationReady,
+      root.profiles.length > 0
+    )
+  }
+
+  // Return/Space on whichever row the cursor is on. Upstream's own entry point
+  // is left byte-identical; this is what the key dispatcher calls instead.
+  function activateCursor() {
+    if (!root.cursorActive) return
+    if (root.conservationFocused) root.requestConservationToggle()
+    else root.activateSelectedProfile()
   }
 
   readonly property bool fullyCharged: {
@@ -412,9 +439,9 @@ Panel {
       onMoveRequested: function(dx, dy) {
         if (!root.cursorActive) { root.cursorActive = true; return }
         if (dx !== 0) root.selectProfileByDelta(dx)
-        else if (dy !== 0) root.selectProfileByDelta(dy)
+        else if (dy !== 0) root.moveFocusRow(dy)
       }
-      onActivateRequested: if (root.cursorActive) root.activateSelectedProfile()
+      onActivateRequested: root.activateCursor()
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
@@ -626,6 +653,15 @@ Panel {
             titleSize: Style.font.body
             checked: root.conservationActive
             enabled: root.conservationReady
+            // Same cursor flag the profile Buttons use, which is all the
+            // highlight this needs: Toggle's _hot is
+            // hasCursor || mouse.containsMouse, identical to Button's.
+            hasCursor: root.cursorActive && root.conservationFocused
+            onHovered: function(h) {
+              if (!h || !Conservation.hoverClaimsFocus(root.conservationReady)) return
+              root.cursorActive = true
+              root.conservationFocused = true
+            }
             onClicked: root.requestConservationToggle()
           }
         }
