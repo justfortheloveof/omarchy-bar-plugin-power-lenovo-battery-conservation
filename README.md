@@ -192,6 +192,13 @@ Two deliberate differences from a stock panel:
   would refuse to flip. The cost is that the row's "run `sudo ./install.sh`"
   message cannot be read with the keyboard alone.
 
+The row's title is bold because the shared `Toggle` component hardcodes
+`font.bold` on its label and offers no property to turn it off. Matching regular
+weight, as the network panel's list rows use, would mean replacing a shared
+component with a local one - and losing its tab focus and Return/Enter/Space
+handling with it. The title size is set to `Style.font.body` so at least the
+size matches the rows beside it.
+
 The cursor stays where it was last put. Hovering a row leaves it lit after the
 mouse moves away, because that is upstream's behaviour: `cursorActive` is only
 ever cleared when the battery appears, so a profile button stays lit the same

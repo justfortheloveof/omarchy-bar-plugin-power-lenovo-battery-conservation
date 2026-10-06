@@ -646,11 +646,6 @@ Panel {
             foreground: root.bar.foreground
             accent: Color.accent
             fontFamily: root.bar.fontFamily
-            // Body size, matching the network panel's list rows and the other
-            // plugin in this repo. Toggle's own default is subtitle, a size up.
-            // The weight stays bold: Toggle hardcodes font.bold on its label and
-            // exposes no way to turn it off, so matching that would mean giving
-            // up the shared component for a local row.
             titleSize: Style.font.body
             checked: root.conservationActive
             enabled: root.conservationReady
