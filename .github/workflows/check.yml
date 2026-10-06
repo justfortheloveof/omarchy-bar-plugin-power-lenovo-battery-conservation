@@ -96,7 +96,13 @@ jobs:
           fi
           bin/check
 
-      # CI has no Omarchy, so the manifest stage and the Model.js comparison
-      # against the upstream mirror are always skipped here. Both still run for
-      # anyone who clones the repo on an Omarchy box. bin/check lists them in its
-      # summary, so a run that skipped something never reads as fully green.
+      # CI has no Omarchy, so the manifest validation and the shell API stages
+      # are always skipped here. Both still run for anyone who clones the repo on
+      # an Omarchy box. bin/check lists them in its summary, so a run that
+      # skipped something never reads as fully green.
+      #
+      # The Model.js comparison does run here: tools/sync-upstream --check runs
+      # earlier in bin/check and fetches the blobless upstream mirror it needs.
+      # That costs a network fetch of basecamp/omarchy per run, and it is what
+      # keeps the Model.js invariant enforced by CI rather than by whoever
+      # remembers to run bin/check locally.

@@ -16,7 +16,7 @@ listed, so a partial run never reads as green.
 | `bin/check-agent-files` | an agent-instruction file anywhere in the tree |
 | `manifest.json` parse | invalid JSON |
 | `node --test`, both suites | any test failure |
-| `Model.js` against the pinned upstream sha | any divergence at all |
+| `Model.js` against the pinned upstream sha | any divergence at all (runs in CI too) |
 | `qmllint` type resolution | `Panel.qml` referencing shell API this omarchy lacks |
 | `Style` members | `Panel.qml` using a `Style` member the installed omarchy lacks |
 | `omarchy plugin validate` | manifest schema |
@@ -110,14 +110,21 @@ tools/sync-upstream --check   # what upstream has done, and what we have
 tools/sync-upstream           # merge it in
 ```
 
-**`upstream.lock` tracks the omarchy that is installed, not omarchy's tip.** The
-panel is not self-contained: it uses types and `Style` members the shell
-provides, so a merge that outruns the shell breaks the widget in a way that does
-not announce itself.
+**`upstream.lock` tracks the release branch for the omarchy that is installed,
+not omarchy's development branch.** The panel is not self-contained: it uses
+types and `Style` members the shell provides, so a merge that outruns the shell
+breaks the widget in a way that does not announce itself.
+
+`quattro` is omarchy's default branch and rolls forward continuously, so merging
+against it imports panel code that no released omarchy has yet. `ShellIpc` and
+`Style.duration()` are both on `quattro` today and on neither the installed
+release nor the locked one. Use the release branch, `v4-0-4` for omarchy 4.0.4.
 
 The order is therefore: update omarchy first, then merge. While omarchy is
-behind, `--check` will keep reporting drift and that is expected. `bin/check`
-is what stops a merge that would go too far.
+behind, `--check` will keep reporting drift and that is expected. It also warns
+when `branch=` and the installed omarchy disagree, so you find out which of the
+two you are behind on rather than guessing. `bin/check` is what stops a merge
+that would go too far.
 
 After merging, run `bin/check`. The `Model.js` stage will tell you if the merge
 touched something it should not have, and the shell API stages will tell you if

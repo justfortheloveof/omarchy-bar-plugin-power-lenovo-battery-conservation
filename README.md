@@ -238,9 +238,15 @@ identifiers would detach the widget from its place in the bar and break
 `upstream.lock` records the omarchy commit this fork tracks, and that commit is
 the common ancestor for every merge.
 
-**It tracks the omarchy you have installed, not the tip of omarchy's branch.**
-That is the part worth understanding, because getting it wrong is invisible until
-the widget fails to appear.
+**It tracks the omarchy you have installed: the release branch, not omarchy's
+development branch.** That is the part worth understanding, because getting it
+wrong is invisible until the widget fails to appear.
+
+Every release has its own branch (`v4-0-1`, `v4-0-4`, ...), and they form a
+fast-forward chain, so after `omarchy update` the pin walks forward from one
+release to the next. `quattro` is omarchy's development branch and the repo's
+default; merging against it would import panel code that no released omarchy has
+yet, which is the failure below, guaranteed.
 
 A cloned first-party panel is not self-contained. It imports types and singleton
 members that the shell provides, so panel code from a newer omarchy can
@@ -255,6 +261,11 @@ Neither produces an error anyone sees. So the order is: **update omarchy first,
 then run `tools/sync-upstream`** to advance the pin. Until then, `--check`
 reporting drift is correct information rather than an action item, and
 `bin/check` fails if the panel ever outruns the shell again.
+
+`--check` also compares the lock's `branch=` against the omarchy installed on
+this machine and warns when they disagree, so that ordering rule is checked
+rather than only written down. It warns and carries on: a fork tracking an older
+omarchy is still a fork worth keeping in step.
 
 ```bash
 tools/sync-upstream --check    # what upstream has done, and what we have, touches nothing
@@ -276,11 +287,11 @@ is which:
 ```
 <<<<<<< ours (Panel.qml)
   Button { text: root.modeLabel() }   // FORK: ours
-||||||| base (upstream 0260d2a)
+||||||| base (upstream c668141e)
   Button { }
 =======
   Button { text: root.heroStatusText }   // upstream
->>>>>>> upstream (quattro 81145eb1)
+>>>>>>> upstream (v4-0-4 c668141e)
 ```
 
 The pin only advances when every file merged clean. Resolve a conflict, commit

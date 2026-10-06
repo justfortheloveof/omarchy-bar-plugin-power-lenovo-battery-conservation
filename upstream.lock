@@ -1,6 +1,6 @@
 # Merge base for tools/sync-upstream.
 #
-# sha tracks the omarchy that is INSTALLED, not the tip of omarchy's branch.
+# sha tracks the omarchy that is INSTALLED, not the tip of the release branch.
 # That distinction matters: a cloned first-party panel is not self-contained. It
 # imports types and singleton members the shell provides, so panel code from a
 # newer omarchy can reference shell API this machine does not have. Two examples
@@ -16,13 +16,25 @@
 # then, --check reporting drift is correct information, not an action item.
 # bin/check enforces the result; see its shell API stage.
 #
+# branch is the RELEASE branch for the omarchy you have installed, not omarchy's
+# development branch. `quattro` is upstream's default HEAD and rolls forward
+# continuously, so merging against it pulls in work no released omarchy has yet,
+# which is exactly the failure described above. Each release has its own branch,
+# and they form a fast-forward chain (v4-0-1 is an ancestor of v4-0-2, and so on),
+# so after `omarchy update` the pin walks forward from one release to the next
+# rather than needing a new base.
+#
+# tools/sync-upstream --check warns when branch= does not match the omarchy this
+# machine has installed, which is how "update omarchy first" gets checked instead
+# of just documented.
+#
 # path  where the first-party plugin lives in the omarchy tree.
 # repo  branch  where to fetch from.
 #
 # Only tools/sync-upstream should change sha, and only after a conflict-free
 # merge. Editing it by hand to skip a version silently discards every upstream
 # change in between.
-sha=0260d2accbc047dda144b4738fdd8a15b9a9e69d
+sha=c668141e9c42b13c80c9ca4ea108e11708c5e8a5
 path=shell/plugins/panels/power
 repo=https://github.com/basecamp/omarchy.git
-branch=quattro
+branch=v4-0-4

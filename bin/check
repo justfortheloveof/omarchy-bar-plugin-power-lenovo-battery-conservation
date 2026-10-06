@@ -28,13 +28,26 @@ python3 -c 'import json; json.load(open("manifest.json"))'
 node --test tests/conservation.test.cjs tests/helper.test.cjs
 
 # ---------------------------------------------------------------------------
+# Where this fork sits against upstream. Never gates: there is nothing to fail,
+# it is only ever information.
+#
+# Runs before the Model.js comparison below, because it is what creates the
+# mirror that stage needs. The other order reads as though the stage is only
+# available offline, which is why it used to skip here and in CI.
+# ---------------------------------------------------------------------------
+if [ -x tools/sync-upstream ]; then
+	echo
+	tools/sync-upstream --check || true
+fi
+
+# ---------------------------------------------------------------------------
 # Model.js must stay byte-identical to upstream. The README says it is
 # unchanged, and every line this fork added to it would be a line that can
 # conflict when upstream edits the same file. Upstream also tests it in
 # test/shell.d/power-test.sh, so churn there is noise for them too.
 #
-# Only checks against the mirror if tools/sync-upstream has already created
-# one, so this stays offline-safe.
+# Now that sync-upstream has run above, the mirror exists, so this stage runs
+# on CI too rather than skipping every run.
 # ---------------------------------------------------------------------------
 pinned=$(sed -n 's/^sha=//p' upstream.lock)
 mirror=${OMARCHY_UPSTREAM_MIRROR:-${TMPDIR:-/tmp}/omarchy-power-lenovo-battery-conservation-upstream.git}
@@ -50,7 +63,7 @@ if [ -d "$mirror" ] && git --git-dir="$mirror" cat-file -e "${pinned}^{commit}" 
 		exit 1
 	fi
 else
-	skip "upstream mirror absent - not comparing Model.js (run tools/sync-upstream first)"
+	skip "no upstream mirror at $mirror - not comparing Model.js (tools/sync-upstream failed to fetch one)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -126,15 +139,6 @@ if command -v omarchy >/dev/null 2>&1 && [ -d /usr/share/omarchy ]; then
 	omarchy plugin validate "$root"
 else
 	skip "omarchy not found - not validating the manifest (local machine only)"
-fi
-
-# ---------------------------------------------------------------------------
-# Report where this fork sits against upstream. Never gates: there is nothing
-# to fail, it is only ever information.
-# ---------------------------------------------------------------------------
-if [ -x tools/sync-upstream ]; then
-	echo
-	tools/sync-upstream --check || true
 fi
 
 # ---------------------------------------------------------------------------

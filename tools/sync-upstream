@@ -77,14 +77,33 @@ ensure_mirror() {
 		note "creating upstream mirror at $MIRROR"
 		git init --bare --quiet "$MIRROR"
 		upstream_git remote add origin "$UPSTREAM_REPO"
+		return
+	fi
+
+	# A mirror cached from an earlier repo= keeps fetching that repo, so editing
+	# repo= in the lock would silently do nothing for anyone who already has one.
+	local existing
+	existing=$(upstream_git remote get-url origin 2>/dev/null || true)
+	if [[ $existing != "$UPSTREAM_REPO" ]]; then
+		die "the mirror at $MIRROR points at '${existing:-<none>}', but the lock says repo=$UPSTREAM_REPO. Point it there yourself with 'git --git-dir=$MIRROR remote set-url origin $UPSTREAM_REPO', or delete the mirror to have it recreated. (OMARCHY_UPSTREAM_MIRROR names a different path.)"
 	fi
 }
 
 fetch_upstream() {
 	# --filter=blob:none keeps the mirror at a few MB; git fetches the
 	# individual file blobs on demand when we `git show` them below.
-	upstream_git fetch --quiet --filter=blob:none origin "$UPSTREAM_BRANCH" ||
-		die "could not fetch $UPSTREAM_BRANCH from $UPSTREAM_REPO"
+	#
+	# Explicit refspec, so origin/$UPSTREAM_BRANCH exists afterwards whatever
+	# refspec the mirror's remote was configured with. With a bare branch name,
+	# git only opportunistically updates a remote-tracking ref when the
+	# configured refspec maps that branch, and OMARCHY_UPSTREAM_MIRROR can point
+	# at a `git clone --mirror` mirror, whose refspec is +refs/*:refs/*. There a
+	# bare `git fetch origin v4-0-4` writes refs/heads/v4-0-4, and the
+	# `git rev-parse origin/v4-0-4` below then fails on a mirror that fetched
+	# the right commit perfectly well.
+	upstream_git fetch --quiet --filter=blob:none origin \
+		"+refs/heads/$UPSTREAM_BRANCH:refs/remotes/origin/$UPSTREAM_BRANCH" ||
+		die "could not fetch $UPSTREAM_BRANCH from $UPSTREAM_REPO. Check the branch name against 'git ls-remote --heads $UPSTREAM_REPO': it should be the release branch for the omarchy you have installed, not omarchy's development branch."
 
 	# The pinned base may be older than this mirror's history, and without it
 	# there is no common ancestor to merge against.
@@ -102,6 +121,43 @@ upstream_file() {
 	local sha=$1 name=$2
 	upstream_git show "$sha:$UPSTREAM_PATH/$name" ||
 		die "upstream has no $UPSTREAM_PATH/$name at ${sha:0:7}"
+}
+
+# ---------------------------------------------------------------------------
+# installed omarchy vs the lock
+# ---------------------------------------------------------------------------
+
+# The lock's branch names the release for the omarchy this machine runs. Say so
+# when it does not, because "update omarchy first, then merge" is only
+# enforceable if the tool knows which side of that swap you are on.
+#
+# Warns rather than dies: the point is to catch a stale lock, not to make a
+# fork of an older omarchy unsyncable. Off-box there is no omarchy to compare
+# against, so this stays quiet.
+installed_branch() {
+	local version
+
+	version=$(pacman -Q omarchy 2>/dev/null | awk '{ print $2 }') || true
+	if [[ -z $version ]]; then
+		version=$(/usr/share/omarchy/bin/omarchy-version 2>/dev/null) || true
+	fi
+	[[ -n $version ]] || return 1
+
+	# 4.0.4-1 -> v4-0-4. The pkgrel is dropped and the dots become dashes.
+	printf 'v%s\n' "${version%%-*}" | tr . -
+}
+
+check_lock_matches_install() {
+	local installed
+
+	installed=$(installed_branch) || return 0
+
+	if [[ $installed != "$UPSTREAM_BRANCH" ]]; then
+		note "WARNING: the lock tracks $UPSTREAM_BRANCH, but this machine has omarchy $installed installed, whose release branch is $installed."
+		note "         Merging against $UPSTREAM_BRANCH brings in panel code that needs an omarchy this machine does not have."
+		note "         Run 'omarchy update' first, then set branch=$installed in $LOCK_NAME and re-run. Nothing has been changed."
+		note ""
+	fi
 }
 
 # ---------------------------------------------------------------------------
@@ -210,6 +266,8 @@ main() {
 	ensure_mirror
 	fetch_upstream
 
+	check_lock_matches_install
+
 	note "base     $BASE_SHA"
 	note "upstream $TIP_SHA ($UPSTREAM_BRANCH)"
 	note ""
@@ -227,7 +285,7 @@ main() {
 	fi
 
 	if ! upstream_git merge-base --is-ancestor "$BASE_SHA" "$TIP_SHA"; then
-		die "the pinned base ${BASE_SHA:0:7]} is no longer an ancestor of $UPSTREAM_BRANCH, so there is nothing to merge against. $UPSTREAM_REPO was rebased or rewritten. Reconcile by hand, then point 'sha=' in $LOCK_NAME at a commit on $UPSTREAM_BRANCH."
+		die "the pinned base ${BASE_SHA:0:7} is no longer an ancestor of $UPSTREAM_BRANCH, so there is nothing to merge against. $UPSTREAM_REPO was rebased or rewritten, or branch= now names a branch that diverged from the pinned base. Reconcile by hand, then point 'sha=' in $LOCK_NAME at a commit on $UPSTREAM_BRANCH."
 	fi
 
 	note "upstream changes to $UPSTREAM_PATH since the pinned base:"
