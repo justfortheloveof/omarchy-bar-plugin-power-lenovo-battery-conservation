@@ -13,16 +13,39 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
-    steps:
-      # v7 is the current major and the first on the node24 action runtime the
-      # runners force Node 20 onto anyway. Node 20 itself was retired from
-      # Actions on 2026-09-23, so the v4s are past advance notice.
-      - uses: actions/checkout@v7
 
-      # Pinning Node here is also what stops the runner image's default Node
-      # from drifting under the tests the way its OS now will. Dropping this
-      # step would hand that back.
-      - uses: actions/setup-node@v7
+    # Only the checkout below needs a token, and only to clone. Stating this
+    # beats inheriting the repository default, which differs between repos
+    # created before and after GitHub changed it in 2023 - and it keeps the
+    # blast radius of bin/check, which runs code out of the pull request, at
+    # read-only. Naming one scope sets every other scope to none, which is the
+    # point: a step that quietly wanted more now fails instead of getting it.
+    permissions:
+      contents: read
+
+    # Nothing here is interactive and a green run is a few seconds of work.
+    # Without this, one hung step costs the 360-minute default.
+    timeout-minutes: 15
+
+    steps:
+      # Pinned to a commit, not the v7 tag. A tag is a name that moves, and a
+      # moved tag is code this repository never reviewed; the checkout v7.0.1
+      # release is not marked immutable. v7 is current for both of these and
+      # runs on the node24 runtime that Node 20's retirement forced them onto.
+      # Dependabot keeps the pins fresh - see .github/dependabot.yml - because
+      # a pin nobody updates is worse than a tag.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Nothing here pushes. Leaving a token in the environment for
+          # bin/check - which runs code from the checkout - to read buys
+          # nothing, and v6+ keeps it in $RUNNER_TEMP rather than .git/config
+          # regardless.
+          persist-credentials: "false"
+
+      # Pinning Node is also what stops the runner image's default Node from
+      # drifting under the tests the way its OS now will. Dropping this step
+      # would hand that back.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
           # There is no package.json and no lockfile here. setup-node v5 added
@@ -33,7 +56,6 @@ jobs:
       # qmllint, for the Panel.qml parse check. Ubuntu does not put Qt's bin
       # directory on PATH, so point at it when the install worked.
       - name: Install Qt tools
-        id: qt
         continue-on-error: true
         run: |
           sudo apt-get update
