@@ -17,6 +17,10 @@ set -euo pipefail
 readonly PACKAGED_DIR=/usr/local/libexec/lenovo-power
 readonly PACKAGED_PATH="$PACKAGED_DIR/conservation"
 
+# Printed at the end, when the password prompt the user has just seen is the
+# thing most likely to make them want to know a polkit rule exists.
+readonly REPO_URL=https://github.com/justfortheloveof/omarchy-bar-plugin-power-lenovo-battery-conservation
+
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 readonly SCRIPT_DIR
 readonly SOURCE_PATH="$SCRIPT_DIR/bin/lenovo-power-conservation"
@@ -62,5 +66,7 @@ fi
 printf '\nInstalled %s (%s, mode %s)\n' "$PACKAGED_PATH" "$owner" "$mode"
 printf '\nThe panel can read the current mode now. Writing it asks for your\n'
 printf 'password once per toggle, through the Omarchy authentication dialog.\n'
-printf '\nReload the shell, or remove and re-add the widget, to pick it up:\n'
+printf 'A polkit rule can be created to skip that prompt. See:\n'
+printf '  %s#caching-the-authorisation\n' "$REPO_URL"
+printf '\nReload the shell to pick it up:\n'
 printf '  omarchy-restart-shell\n'

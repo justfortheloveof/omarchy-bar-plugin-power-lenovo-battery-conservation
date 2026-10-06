@@ -268,3 +268,19 @@ test("the shipped rules example is not installed by install.sh", () => {
     "install.sh must not copy the rules file into /etc without being asked"
   );
 });
+
+test("install.sh points at the polkit option after installing", () => {
+  // The last thing install.sh prints is aimed at someone who has just been
+  // asked for their password by the panel, which is the moment they are most
+  // likely to want to know a polkit rule exists. Keep the pointer, and keep it
+  // aimed at a heading that exists.
+  const install = fs.readFileSync(path.join(__dirname, "..", "install.sh"), "utf8");
+  assert.match(install, /polkit rule can be created/, "should mention the polkit option");
+  assert.match(install, /#caching-the-authorisation/, "should link to the caching section");
+
+  const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8");
+  assert.ok(
+    /^#{1,6}\s+Caching the authorisation\s*$/m.test(readme),
+    "README should have a 'Caching the authorisation' heading for that link to land on"
+  );
+});
