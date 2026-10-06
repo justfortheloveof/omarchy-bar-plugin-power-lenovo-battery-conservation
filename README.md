@@ -23,33 +23,32 @@ omarchy-shell omarchy.power toggleConservation   # prints the value it asked for
 
 `conservationStatus` answers from what the panel last read: free and instant.
 
-`toggleConservation` is asynchronous. It queues the write to a background process
-
-- the one that raises the dialog - and returns immediately, so its answer is the
-value it asked for, not the outcome: `0` or `1`, or nothing if it could not act.
-Dismiss the dialog and the mode is unchanged, quietly: that is an answer, not a
-fault, so it raises nothing. Any other failure does raise a notification. Either
-way the panel re-reads the attribute when the write finishes, so the row catches
-up by itself.
+`toggleConservation` is asynchronous. It queues the write to a background
+process - the one that raises the dialog - and returns immediately, so its
+answer is the value it asked for, not the outcome: `0` or `1`, or nothing if it
+could not act. Dismiss the dialog and the mode is unchanged, quietly: that is
+an answer, not a fault, so it raises nothing. Any other failure does raise a
+notification. Either way the panel re-reads the attribute when the write
+finishes, so the row catches up by itself.
 
 ### Reading the row
 
-The row tells you which state you are in. What it cannot do is make the switch
-look unknown: `Toggle` has no indeterminate state, its track is a private id, and
-`checked` is a bool, so a row that could not be read still renders as a normal
-off switch. Each state therefore says in words whether that off is a fact or a
-guess.
+The row under **BATTERY CONSERVATION** always tells you the current mode in
+words, and the switch beside it shows on or off. When the plugin cannot read the
+mode, it says so, because the switch has no third position to show it in. So a
+switch reading **off** next to a row calling the mode **unknown** means "not
+read", not "off" - read the sentence, not the switch.
 
-| Row shows | Switch | Means |
+| The row says | Switch | What is going on |
 | --- | --- | --- |
-| the real value, enabled | reflects reality | the attribute was read; clicking asks for your password |
-| `Current mode unknown. Run sudo ./install.sh...` | off, but a guess | the helper is not installed, so the mode cannot be read at all |
-| `No Lenovo conservation_mode attribute here...` | off, and accurate | not an IdeaPad; the mode does not exist here |
-| `Current mode unknown: the attribute reported...` | off, but a guess | the attribute exists but reports something this plugin does not know |
+| *Stop charging around 80% to reduce long-term wear.* | on or off | The mode was read, and that is the current value. Clicking asks for your password. |
+| `Current mode unknown. Run sudo ./install.sh in the plugin directory to enable changes.` | off | `install.sh` has not been run, so the mode cannot be read at all - not even the current value. See [Install](#install). |
+| `Current mode unknown: the attribute reported a value this plugin does not recognise.` | off | The attribute exists but reports something unexpected, so the plugin will not act on it rather than guess. |
+| `No Lenovo conservation_mode attribute here, so conservation mode is always off.` | off | Not a Lenovo IdeaPad. The mode does not exist on this machine, so off here is accurate. |
 
-A switch reading off while the row calls the mode unknown is the intended
-behaviour, not a bug: it is the honest combination available from this
-component.
+The three unknown states come from three different places, and only the first is
+something you can do anything about: the helper was never installed, the
+attribute reported an unexpected value, or the machine has no such attribute.
 
 ## Install
 

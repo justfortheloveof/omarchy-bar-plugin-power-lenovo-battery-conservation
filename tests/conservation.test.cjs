@@ -161,3 +161,23 @@ test("the helper's status words are the ones this module knows", () => {
   assert.match(helper, /printf '0\\n'/, "prints 0");
   assert.match(helper, /printf '1\\n'/, "prints 1");
 });
+
+test("the README quotes the row's strings verbatim", () => {
+  // The reading-the-row table tells a user which sentence in their panel maps to
+  // which explanation, so it has to quote exactly what the panel prints. A
+  // reword of any of them silently breaks the lookup.
+  const panel = fs.readFileSync(`${__dirname}/../Panel.qml`, "utf8");
+  const readme = fs.readFileSync(`${__dirname}/../README.md`, "utf8");
+
+  const block = panel.slice(
+    panel.indexOf("readonly property string conservationDescription")
+  );
+  const strings = [
+    ...block.slice(0, block.indexOf("\n  }")).matchAll(/return "([^"]+)"/g),
+  ].map((m) => m[1]);
+
+  assert.equal(strings.length, 4, "expected the four panel states");
+  for (const s of strings) {
+    assert.ok(readme.includes(s), `README should quote verbatim: ${s}`);
+  }
+});
