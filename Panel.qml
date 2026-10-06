@@ -631,6 +631,7 @@ Panel {
                   if (h) {
                     root.cursorActive = true
                     root.profileIndex = index
+                    root.conservationFocused = false
                   }
                 }
               }
