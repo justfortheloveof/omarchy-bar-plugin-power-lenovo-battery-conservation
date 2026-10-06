@@ -22,7 +22,7 @@ listed, so a partial run never reads as green.
 | `omarchy plugin validate` | manifest schema |
 | `tools/sync-upstream --check` | never; reports where this fork sits |
 
-Three of those deserve a note.
+Four of those deserve a note.
 
 **`Model.js` must stay byte-identical to upstream.** The README calls it
 unchanged, and every line added to it is a line that can conflict on the next
@@ -45,9 +45,20 @@ reports everything as `Warning: ... [category]`, a fatal syntax error included,
 so grepping for `Error` finds nothing. The exit code is the signal: 0 when the
 file parses, 255 when it does not.
 
+**The two shell API stages are gated separately, because they need different
+things.** The `Style` check is `grep` against the installed `Style.qml` and needs
+nothing but `$SHELL_DIR`; only type resolution runs `qmllint`. They used to sit
+in one `if/elif`, so a box with Qt installed but unlinked skipped both and
+reported the missing shell directory as the reason, which was false. `qmllint`
+lives in `/usr/lib/qt6/bin` without a symlink into `/usr/bin`, so `command -v`
+misses it on most boxes; `bin/check` probes that directory and the
+`x86_64-linux-gnu` variant, then falls back to `PATH`. Each skip now names its
+own cause, and a skip is a skip of one stage rather than two.
+
 Stages skipped: no `omarchy` (off-box), no `qmllint` (not installed), no
 upstream shell tree. The shell API stages can never run in CI, which has no
-Omarchy; they run for anyone who clones the repo on an Omarchy box.
+Omarchy; they run for anyone who clones the repo on an Omarchy box. The `Style`
+stage runs anywhere `$SHELL_DIR` exists, so it runs with or without `qmllint`.
 
 ## Tests
 

@@ -76,40 +76,32 @@ fi
 # separate checks, because the two failures surface differently.
 # ---------------------------------------------------------------------------
 SHELL_DIR=/usr/share/omarchy/shell
-qmllint_cmd=$(command -v qmllint || true)
+
+# Qt does not link qmllint into /usr/bin, so `command -v qmllint` finds nothing
+# on a box where it is installed. Look where Qt actually puts it, then fall back
+# to PATH. Same two directories the CI workflow probes, so both agree.
+qmllint_cmd=
+for candidate in /usr/lib/qt6/bin/qmllint /usr/lib/x86_64-linux-gnu/qt6/bin/qmllint; do
+	if [ -x "$candidate" ]; then
+		qmllint_cmd=$candidate
+		break
+	fi
+done
+if [ -z "$qmllint_cmd" ]; then
+	qmllint_cmd=$(command -v qmllint || true)
+fi
 
 if [ ! -d "$SHELL_DIR" ]; then
-	skip "no $SHELL_DIR - not checking Panel.qml against the shell API (off-box)"
-	skip "no $SHELL_DIR - not parsing Panel.qml"
-elif [ -z "$qmllint_cmd" ]; then
-	skip "no $SHELL_DIR - not checking Style members against the shell (off-box)"
-	skip "qmllint not found - not checking Panel.qml type resolution"
+	skip "no $SHELL_DIR - not checking Style members or Panel.qml type resolution (off-box)"
 else
-	# qs -> <shell dir> so `import qs.Commons` resolves, the way the running
-	# shell resolves it.
-	qsimport=$(mktemp -d)
-	ln -s "$SHELL_DIR" "$qsimport/qs"
-
-	# 1. Type resolution. qmllint reports an unresolvable type as
-	#    "X was not found"; that is the check that catches a panel referencing
-	#    shell API newer than the install. signal-handler-parameters is excluded
-	#    because upstream's own file produces it (QProcess::ExitStatus), so it
-	#    is noise rather than a finding.
-	lint_output=$("${qmllint_cmd:-qmllint}" -I "$qsimport" Panel.qml 2>&1) && lint_status=0 || lint_status=$?
-
-	unresolved=$(grep 'was not found' <<<"$lint_output" | grep -v '\[signal-handler-parameters\]' || true)
-	if [ -n "$unresolved" ]; then
-		echo "Panel.qml references shell API this omarchy does not have:" >&2
-		echo "$unresolved" | sed 's/^/  /' >&2
-		echo "Either update omarchy, or re-pin upstream.lock to the installed" >&2
-		echo "version and re-run tools/sync-upstream." >&2
-		rm -rf "$qsimport"
-		exit 1
-	fi
-
-	# 2. Style members. qmllint structurally cannot catch these: Style resolves,
-	# so a missing member looks like the same missing-property noise it reports
-	# for unresolved components. Check the source instead.
+	# Stage 1: Style members. qmllint structurally cannot catch these: Style
+	# resolves, so a missing member looks like the same missing-property noise it
+	# reports for unresolved components. Check the source instead.
+	#
+	# Needs only $SHELL_DIR, which is why this is a stage of its own and not
+	# bundled with the qmllint run below. Gating it on qmllint made it skip on
+	# every box where Qt is installed but not linked into PATH, reporting a stage
+	# that had everything it needed.
 	missing_style=""
 	for member in $(grep -oE '\bStyle\.[a-zA-Z_][a-zA-Z0-9_]*' Panel.qml | sed 's/^Style\.//' | sort -u); do
 		grep -qE "(property|readonly property|function)[[:space:]].*\b$member\b" "$SHELL_DIR/Commons/Style.qml" ||
@@ -117,19 +109,45 @@ else
 	done
 	if [ -n "$missing_style" ]; then
 		echo "Panel.qml uses Style member(s) this omarchy's Style.qml does not define:$missing_style" >&2
-		rm -rf "$qsimport"
 		exit 1
 	fi
+	echo "Panel.qml: every Style member resolves against $SHELL_DIR"
 
-	if [ "$lint_status" -ne 0 ]; then
-		echo "Panel.qml does not parse (qmllint exit $lint_status):" >&2
-		grep -B1 -A3 '\[syntax\]' <<<"$lint_output" >&2 || echo "$lint_output" >&2
+	if [ -z "$qmllint_cmd" ]; then
+		skip "qmllint not on PATH or in /usr/lib/qt6/bin - not checking Panel.qml type resolution"
+	else
+		# qs -> <shell dir> so `import qs.Commons` resolves, the way the running
+		# shell resolves it.
+		qsimport=$(mktemp -d)
+		ln -s "$SHELL_DIR" "$qsimport/qs"
+
+		# Stage 2: type resolution. qmllint reports an unresolvable type as
+		#    "X was not found"; that is the check that catches a panel referencing
+		#    shell API newer than the install. signal-handler-parameters is excluded
+		#    because upstream's own file produces it (QProcess::ExitStatus), so it
+		#    is noise rather than a finding.
+		lint_output=$("$qmllint_cmd" -I "$qsimport" Panel.qml 2>&1) && lint_status=0 || lint_status=$?
+
+		unresolved=$(grep 'was not found' <<<"$lint_output" | grep -v '\[signal-handler-parameters\]' || true)
+		if [ -n "$unresolved" ]; then
+			echo "Panel.qml references shell API this omarchy does not have:" >&2
+			echo "$unresolved" | sed 's/^/  /' >&2
+			echo "Either update omarchy, or re-pin upstream.lock to the installed" >&2
+			echo "version and re-run tools/sync-upstream." >&2
+			rm -rf "$qsimport"
+			exit 1
+		fi
+
+		if [ "$lint_status" -ne 0 ]; then
+			echo "Panel.qml does not parse (qmllint exit $lint_status):" >&2
+			grep -B1 -A3 '\[syntax\]' <<<"$lint_output" >&2 || echo "$lint_output" >&2
+			rm -rf "$qsimport"
+			exit 1
+		fi
+
 		rm -rf "$qsimport"
-		exit 1
+		echo "Panel.qml: parses, and every type resolves against $SHELL_DIR"
 	fi
-
-	rm -rf "$qsimport"
-	echo "Panel.qml: parses, and every type and Style member resolves against $SHELL_DIR"
 fi
 
 # ---------------------------------------------------------------------------
