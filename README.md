@@ -24,6 +24,7 @@ omarchy-shell omarchy.power toggleConservation   # prints the value it asked for
 `conservationStatus` answers from what the panel last read: free and instant.
 
 `toggleConservation` is asynchronous. It queues the write to a background process
+
 - the one that raises the dialog - and returns immediately, so its answer is the
 value it asked for, not the outcome: `0` or `1`, or nothing if it could not act.
 Dismiss the dialog and the mode is unchanged, quietly: that is an answer, not a
@@ -91,24 +92,17 @@ omarchy plugin update io.github.justfortheloveof.power-lenovo-battery-conservati
 ## Uninstalling / Removing
 
 ```bash
+sudo ~/.config/omarchy/plugins/io.github.justfortheloveof.power-lenovo-battery-conservation/uninstall.sh
 omarchy plugin remove io.github.justfortheloveof.power-lenovo-battery-conservation --yes   # restores the stock panel
-sudo ./uninstall.sh
 ```
 
 The two are separate. `omarchy plugin remove` only knows about files under
 `~/.config/omarchy/plugins`, so it leaves the root-owned helper - and the polkit
 rule, if you added one - on the system. `uninstall.sh` takes both:
 
-```bash
-sudo ~/.config/omarchy/plugins/io.github.justfortheloveof.power-lenovo-battery-conservation/uninstall.sh
-```
-
 It removes the helper, and if it finds the optional polkit rule it asks before
 removing that too. Answer `y` and both go; anything else leaves the rule alone
-and prints the command to remove it yourself. It never removes a file it cannot
-identify as ours, so a polkit rule you wrote yourself at the same path is left
-alone. `polkitd` watches `rules.d`, so removing the rule takes effect without a
-restart.
+and prints the command to remove it yourself.
 
 ## How the privileged part works
 
