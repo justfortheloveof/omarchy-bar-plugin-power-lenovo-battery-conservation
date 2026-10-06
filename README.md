@@ -1,29 +1,31 @@
 # Power - Lenovo Battery Conservation
 
-The Omarchy Quattro first-party power panel - battery icon, charge bar,
-cycle count, power profile picker - forked to add Lenovo's battery conservation
-mode (tested on a ThinkBook 13x G2 IAP) the `ideapad_acpi` driver's
-`conservation_mode` setting, which stops charging around 80% instead of 100% and
-slows long-term battery wear on a machine that spends its life plugged in.
+Adds a Battery "conservation mode" toggle, for Lenovo laptops, to the
+Omarchy Quattro power bar plugin  
+(tested on a ThinkBook 13x G2 IAP)
+
+Uses the `ideapad_acpi` driver's `conservation_mode` setting, which stops charging
+around 80% instead of 100% and slows long-term battery wear on a machine that
+spends its life plugged in.
 
 ## What it does
 
-Open the Power panel from the battery icon in the bar. Under **POWER PROFILE**
-there is a **BATTERY CONSERVATION** section with one toggle. Reading the current
-mode is silent and needs no password. Changing it asks for your password through
-the Omarchy authentication dialog, every time.
+- Adds a "Conservation mode" toggle to the Omarchy Quattro default power bar plugin
+- Shows "Conservation mode" status
+- Toggles "Conservation mode" on/off
 
-From a keybinding or a script:
+## CLI Usage
 
 ```bash
 omarchy-shell omarchy.power conservationStatus   # on, off, or unknown
 omarchy-shell omarchy.power toggleConservation   # prints the value it asked for
 ```
 
-`toggleConservation` returns `0` or `1`, the value it asked the kernel to write,
-or nothing if it declined. It does not return the result: the password prompt
-means the write has not happened when it replies. Ask `conservationStatus` again
-a moment later for the truth.
+`toggleConservation` returns `0` or `1`: the value it asked the kernel to write
+OR nothing if it declined.  
+It does not return the result: the password prompt means the write has not
+happened when it replies. Query `conservationStatus` again later for the updated
+status.
 
 ### Reading the row
 
@@ -46,95 +48,24 @@ component.
 
 ## Install
 
-Two commands. The first adds the panel; the second installs the one file the
-panel needs before it can change anything.
+> [!NOTE]
+> This **replaces** the stock Power panel rather than sitting beside it, and
+> removing this plugin brings the stock one back.
+
+1. Add the plugin and enable it
+1. Install the privileged helper
+1. Restart the shell so the bar and plugins reload
 
 ```bash
 omarchy plugin add https://github.com/justfortheloveof/omarchy-bar-plugin-power-lenovo-battery-conservation.git --enable
+sudo ~/.config/omarchy/plugins/io.github.justfortheloveof.power-lenovo-battery-conservation/install.sh
 omarchy-restart-shell
 ```
 
-```bash
-sudo ~/.config/omarchy/plugins/io.github.justfortheloveof.power-lenovo-battery-conservation/install.sh
-```
-
-That is the whole setup. The panel can read the conservation mode as soon as
-the first command finishes, and the second is only needed to *change* it, because
-writing to the kernel attribute needs root. `install.sh` finds its own directory,
-so the absolute path works from anywhere; from a clone of this repository, `cd`
-there and run `sudo ./install.sh`.
-
-This **replaces** the stock Power panel rather than sitting beside it, and
-removing the plugin brings the stock one back.
-
-If you would rather not type your password on every toggle, there is a one-line
-opt-in: [Caching the authorisation](#caching-the-authorisation).
-
-### Updating and removing
-
-```bash
-omarchy plugin update io.github.justfortheloveof.power-lenovo-battery-conservation --yes
-omarchy plugin remove io.github.justfortheloveof.power-lenovo-battery-conservation --yes   # restores the stock panel
-```
-
-Source of truth is this repository. `omarchy plugin add` clones it into
-`~/.config/omarchy/plugins/io.github.justfortheloveof.power-lenovo-battery-conservation/`;
-never edit there, because the next update overwrites it.
-
-## How the privileged part works
-
-Only one command above is privileged. This is the reasoning behind it, and why
-it is shaped the way it is. Skip this section if you just want to use the panel.
-
-### Why a root-owned helper
-
-Reading the current mode needs no privilege: `conservation_mode` is
-world-readable. Writing it does, because the attribute is owned by root, and the
-kernel offers no unprivileged route to change it. So something has to run as
-root. What it must not be is a file from the plugin directory, which your own
-session can rewrite.
-
-So `install.sh` places a copy of `bin/lenovo-power-conservation` at
-`/usr/local/libexec/lenovo-power/conservation`, owned by root and writable by
-nobody else, and that installed copy is the only thing the plugin ever asks to be
-elevated. It is deliberately hard to turn into anything else:
-
-- **It takes no path from its caller.** It resolves the kernel attribute itself,
-  from a glob fixed inside the script. A caller cannot redirect the write.
-- **It writes only `0` or `1`.** Everything else is refused before a path is
-  resolved or a byte is written.
-- **It never re-executes itself.** `set` requires already being root, so a copy
-  in a user-writable directory cannot elevate itself. Somebody has to name the
-  installed path to `pkexec` on purpose.
-- **It reads the attribute back** after writing and fails if the kernel did not
-  keep the value, rather than reporting success on the strength of a `write`
-  that returned zero.
-
-So a compromised plugin directory buys an attacker exactly two possible writes
-to one firmware attribute. That is the whole trust boundary, and it is narrow
-enough to state.
-
-`install.sh` reads that helper from the plugin directory, which is
-user-writable. That is deliberate: at install time you are trusting the
-repository you chose to run. The boundary that matters is at toggle time, and
-from then on the root-owned copy is what runs.
-
-### Why polkit and not sudo
-
-Because a bar panel is not a terminal. `sudo` needs a tty to prompt on, so from a
-panel it cannot ask you anything. `pkexec` hands the question to polkit, which
-hands it to the agent inside `omarchy-shell`, so the prompt is the themed Omarchy
-dialog. This is the same reasoning `omarchy-dns` uses when it falls through to
-`pkexec`.
-
-Nothing is granted permanently. pkexec uses the stock
-`org.freedesktop.policykit.exec` action, which is `auth_admin`, so **every toggle
-authenticates**. There is no sudoers entry and no passwordless rule.
-
 ### Caching the authorisation
 
-If you would rather not authenticate on every click, copy the example rules file
-into place:
+The toggle will prompt for your password using the Omarchy themed. If you would rather not authenticate
+on every click, copy the example rules file into place:
 
 ```bash
 cd ~/.config/omarchy/plugins/io.github.justfortheloveof.power-lenovo-battery-conservation
@@ -146,8 +77,41 @@ omarchy-restart-shell
 It only turns `AUTH_ADMIN` into `AUTH_ADMIN_KEEP` for one exact command line,
 `.../conservation set <0|1>`, on a local session, for members of `wheel`.
 Nothing else on the system changes, and deleting the file undoes it.
-`install.sh` does not copy it in for you, on purpose: nothing should persist in
-your system's authorisation policy unless you asked for it.
+
+## Updating
+
+```bash
+omarchy plugin update io.github.justfortheloveof.power-lenovo-battery-conservation --yes
+```
+
+## Uninstalling / Removing
+
+```bash
+omarchy plugin remove io.github.justfortheloveof.power-lenovo-battery-conservation --yes   # restores the stock panel
+```
+
+## How the privileged part works
+
+### Why a root-owned helper
+
+Reading the current "conservation mode" needs no privilege: `conservation_mode`
+is world-readable. Writing it does, because the attribute is owned by root, and
+the kernel offers no unprivileged route to change it. Something has to run as
+root. Because the plugin directory is user writeable, we create a helper file that
+can only be modified by the root user so that it is not tampered with:
+
+`install.sh` places a copy of `bin/lenovo-power-conservation` at
+`/usr/local/libexec/lenovo-power/conservation`, owned by root and writable by
+nobody else, and that installed copy is the only thing the plugin ever asks to be
+elevated.
+
+### Why polkit and not sudo
+
+So the prompt is the themed Omarchy dialog. Keeping the experience consistent.
+
+Nothing is granted permanently. `pkexec` is used with the stock
+`org.freedesktop.policykit.exec` action, which is `auth_admin`, so **every toggle
+authenticates**. There is no sudoers entry involved.
 
 ### What lands on disk, and how to remove it
 
@@ -169,7 +133,6 @@ about files under `~/.config/omarchy/plugins`.
 Both the helper and the optional rules file carry their source repository and
 licence in their header, so anything installed on your system says where it came
 from and how to remove it.
-
 
 ## Development
 
