@@ -130,7 +130,7 @@ elevated.
 
 So the prompt is the themed Omarchy dialog. Keeping the experience consistent.
 
-Nothing is granted permanently. `pkexec` is used with the stock
+By default, nothing is granted permanently. `pkexec` is used with the stock
 `org.freedesktop.policykit.exec` action, which is `auth_admin`, so **every toggle
 authenticates**. There is no sudoers entry involved. The
 [Skipping the authentication](#skipping-the-authentication) section is the

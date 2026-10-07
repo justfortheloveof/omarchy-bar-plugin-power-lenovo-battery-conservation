@@ -21,7 +21,6 @@ listed, so a partial run never reads as green.
 | `Style` members | `Panel.qml` using a `Style` member the installed omarchy lacks |
 | `omarchy plugin validate` | manifest schema |
 | `tools/sync-upstream --check` | never; reports where this fork sits |
-| `tools/sync-upstream --diff` | never; prints this fork's changes as a patch |
 
 Four of those deserve a note.
 
@@ -96,8 +95,9 @@ Do not reformat, reorder or tidy anything you did not add. The merge is clean
 whenever the two sides do not share a line, so an insertion is free and an edit
 to a line upstream is changing costs a conflict every time.
 
-The only edit inside code upstream owns is two methods appended to the existing
-`IpcHandler` block. If you add another, append it after those.
+The only edits inside code upstream owns are two methods appended to the existing
+`IpcHandler` block, and the panel key dispatcher's `onMoveRequested` and
+`onActivateRequested` handlers. If you add another, append it after those.
 
 **Check a change stays mergeable rather than assuming it.** Three-way merge
 `Panel.qml` against a deliberately adversarial upstream:
@@ -161,7 +161,7 @@ the merge outran the omarchy you are running.
 ## Security
 
 The reasoning behind the root-owned helper lives in the README's
-*Privileged setup* section. The short version: the installed copy is the only
+*How the privileged part works* section. The short version: the installed copy is the only
 thing ever elevated, it takes no path from its caller, and it writes only `0` or
 `1`.
 
