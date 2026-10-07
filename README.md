@@ -2,7 +2,7 @@
 
 ![preview](preview.png)
 
-Adds a Battery "conservation mode" toggle, for Lenovo laptops, to the
+Adds a Battery "Conservation Mode" toggle, for Lenovo laptops, to the
 Omarchy Quattro power bar plugin  
 (tested on a ThinkBook 13x G2 IAP)
 
@@ -12,27 +12,10 @@ spends its life plugged in.
 
 ## What it does
 
-- Adds a "Conservation mode" toggle to the Omarchy Quattro default power bar plugin
-- Shows "Conservation mode" status
-- Toggles "Conservation mode" on/off
+- Adds a "Conservation Mode" toggle to the Omarchy Quattro default power bar plugin
+- Shows "Conservation Mode" status
+- Toggles "Conservation Mode" on/off
 - Notifies on failure
-
-## CLI Usage
-
-```bash
-omarchy-shell omarchy.power conservationStatus   # on, off, or unknown
-omarchy-shell omarchy.power toggleConservation   # prints the value it asked for
-```
-
-`conservationStatus` answers from what the panel last read: free and instant.
-
-`toggleConservation` is asynchronous. It queues the write to a background
-process - the one that raises the dialog - and returns immediately, so its
-answer is the value it asked for, not the outcome: `0` or `1`, or nothing if it
-could not act. Dismiss the dialog and the mode is unchanged, quietly: that is
-an answer, not a fault, so it raises nothing. Any other failure does raise a
-notification. Either way the panel re-reads the attribute when the write
-finishes, so the row catches up by itself.
 
 ## Toggle UI Description
 
@@ -72,7 +55,7 @@ sudo ~/.config/omarchy/plugins/io.github.justfortheloveof.power-lenovo-battery-c
 omarchy-restart-shell
 ```
 
-### Caching the authorisation
+### Skipping the authentication
 
 The toggle will prompt for your password using the Omarchy themed. If you would rather not authenticate
 on every click, copy the example rules file into place:
@@ -82,11 +65,13 @@ cd ~/.config/omarchy/plugins/io.github.justfortheloveof.power-lenovo-battery-con
 sudo cp policy/lenovo-power-conservation.rules.example \
      /etc/polkit-1/rules.d/50-lenovo-power-conservation.rules
 omarchy-restart-shell
+cd -
 ```
 
-It only turns `AUTH_ADMIN` into `AUTH_ADMIN_KEEP` for one exact command line,
-`.../conservation set <0|1>`, on a local session, for members of `wheel`.
-Nothing else on the system changes, and deleting the file undoes it.
+It grants that one exact command line, `.../conservation set <0|1>`, **without
+any authentication** - on a local session, for members of wheel. Nothing else
+on the system changes, and deleting the file undoes it. This is a permanent
+passwordless grant, scoped exactly that tightly.
 
 ## Updating
 
@@ -96,24 +81,41 @@ omarchy plugin update io.github.justfortheloveof.power-lenovo-battery-conservati
 
 ## Uninstalling / Removing
 
+Removing the plugin restores the stock Power panel
+
 ```bash
 sudo ~/.config/omarchy/plugins/io.github.justfortheloveof.power-lenovo-battery-conservation/uninstall.sh
-omarchy plugin remove io.github.justfortheloveof.power-lenovo-battery-conservation --yes   # restores the stock panel
+omarchy plugin remove io.github.justfortheloveof.power-lenovo-battery-conservation --yes
 ```
 
-The two are separate. `omarchy plugin remove` only knows about files under
-`~/.config/omarchy/plugins`, so it leaves the root-owned helper - and the polkit
-rule, if you added one - on the system. `uninstall.sh` takes both:
+- `omarchy plugin remove` only knows about files under `~/.config/omarchy/plugins`, so it leaves the root-owned helper - and the polkit
+rule, if you added one - on the system.
+- `uninstall.sh` removes the helper, and if it finds the optional polkit rule it asks before removing that too. Answer `y` and both go; anything else leaves the rule alone and prints the command to remove it yourself.
 
-It removes the helper, and if it finds the optional polkit rule it asks before
-removing that too. Answer `y` and both go; anything else leaves the rule alone
-and prints the command to remove it yourself.
+## CLI Usage
+
+You can also check the "Conservation Mode" status and toggle it from the command line:
+
+```bash
+omarchy-shell omarchy.power conservationStatus   # on, off, or unknown
+omarchy-shell omarchy.power toggleConservation   # prints the value it asked for
+```
+
+`conservationStatus` answers from what the panel last read: free and instant.
+
+`toggleConservation` is asynchronous. It queues the write to a background
+process - the one that raises the dialog - and returns immediately, so its
+answer is the value it asked for, not the outcome: `0` or `1`, or nothing if it
+could not act. Dismiss the dialog and the mode is unchanged, quietly: that is
+an answer, not a fault, so it raises nothing. Any other failure does raise a
+notification. Either way the panel re-reads the attribute when the write
+finishes, so the row catches up by itself.
 
 ## How the privileged part works
 
 ### Why a root-owned helper
 
-Reading the current "conservation mode" needs no privilege: `conservation_mode`
+Reading the current "Conservation Mode" needs no privilege: `conservation_mode`
 is world-readable. Writing it does, because the attribute is owned by root, and
 the kernel offers no unprivileged route to change it. Something has to run as
 root. Because the plugin directory is user writeable, we create a helper file that
@@ -130,7 +132,9 @@ So the prompt is the themed Omarchy dialog. Keeping the experience consistent.
 
 Nothing is granted permanently. `pkexec` is used with the stock
 `org.freedesktop.policykit.exec` action, which is `auth_admin`, so **every toggle
-authenticates**. There is no sudoers entry involved.
+authenticates**. There is no sudoers entry involved. The
+[Skipping the authentication](#skipping-the-authentication) section is the
+deliberate, opt-in exception.
 
 ### What lands on disk, and how to remove it
 
@@ -149,13 +153,13 @@ There is a second file you may put on the system yourself, and
 `install.sh` never does it for you:
 
 ```
-/etc/polkit-1/rules.d/50-lenovo-power-conservation.rules    only if you took the caching option
+/etc/polkit-1/rules.d/50-lenovo-power-conservation.rules    only if you took the passwordless option
 ```
 
 So `sudo ./uninstall.sh` deals with both: it removes the helper unconditionally,
 and offers you the polkit rule as well. It asks rather than assuming, because
 the rule is as likely to be something you wrote yourself as a copy of ours, and
-because leaving it behind keeps a cached authorisation pointing at a helper that
+because leaving it behind keeps a passwordless grant pointing at a helper that
 is no longer there.
 
 To remove it again, `sudo ./uninstall.sh`, or simply delete the file, since it
@@ -375,7 +379,7 @@ skips.
 | `manifest.json` | plugin id, `clonedFrom: omarchy.power` |
 | `bin/lenovo-power-conservation` | the only thing that runs as root |
 | `install.sh`, `uninstall.sh` | one-time privileged setup, and its removal; `uninstall.sh` also offers to remove the polkit rule |
-| `policy/lenovo-power-conservation.rules.example` | optional polkit caching, never installed automatically; copied by hand to `/etc/polkit-1/rules.d/50-lenovo-power-conservation.rules` |
+| `policy/lenovo-power-conservation.rules.example` | optional passwordless grant, never installed automatically; copied by hand to `/etc/polkit-1/rules.d/50-lenovo-power-conservation.rules` |
 | `upstream.lock` | pinned merge base and fetch coordinates |
 | `tools/sync-upstream` | the three-way merge against upstream |
 | `tests/` | both suites |

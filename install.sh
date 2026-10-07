@@ -61,6 +61,6 @@ printf '\nInstalled %s (%s, mode %s)\n' "$PACKAGED_PATH" "$owner" "$mode"
 printf '\nThe panel can read the current mode now. Writing it asks for your\n'
 printf 'password once per toggle, through the Omarchy authentication dialog.\n'
 printf 'A polkit rule can be created to skip that prompt. See:\n'
-printf '  %s#caching-the-authorisation\n' "$REPO_URL"
+printf '  %s#skipping-the-authentication\n' "$REPO_URL"
 printf '\nReload the shell to pick it up:\n'
 printf '  omarchy-restart-shell\n'

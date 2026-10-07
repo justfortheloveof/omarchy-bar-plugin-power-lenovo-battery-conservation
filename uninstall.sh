@@ -49,11 +49,11 @@ fi
 rmdir "$PACKAGED_DIR" 2>/dev/null && printf 'Removed %s\n' "$PACKAGED_DIR"
 
 # The rules file is opt-in and install.sh never puts it there, so it is offered
-# rather than taken. Left behind, it keeps a cached authorisation pointing at a
+# rather than taken. Left behind, it keeps a passwordless grant pointing at a
 # helper that is no longer there.
 if [[ -e $RULES_PATH ]]; then
 	printf '\nAlso present:\n  %s\n' "$RULES_PATH"
-	printf 'It caches the authorisation for this helper. Remove it as well? [y/N] '
+	printf 'It grants this helper without a password. Remove it as well? [y/N] '
 
 	reply=""
 	if [[ -t 0 ]]; then

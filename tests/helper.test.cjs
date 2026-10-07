@@ -289,13 +289,14 @@ test("install.sh, uninstall.sh, the helper and Panel.qml agree on the installed 
   );
 });
 
-test("the rules example only widens our own command line", () => {
-  // A stray YES in this file would hand out far more than one toggle.
+test("the rules example grants YES for our own command line only", () => {
+  // A YES that is not scoped by the three guards below would hand out far more
+  // than one toggle.
   const rules = fs.readFileSync(
     path.join(__dirname, "..", "policy", "lenovo-power-conservation.rules.example"),
     "utf8"
   );
-  assert.ok(!/polkit\.Result\.YES/.test(rules), "must never grant without authentication");
+  assert.match(rules, /polkit\.Result\.YES/, "the optional rule grants without authentication by design");
   assert.match(rules, /conservation set \[01\]/, "must match only the exact write");
   assert.match(rules, /isInGroup\("wheel"\)/);
   assert.match(rules, /subject\.local/);
@@ -316,12 +317,12 @@ test("install.sh points at the polkit option after installing", () => {
   // aimed at a heading that exists.
   const install = fs.readFileSync(path.join(__dirname, "..", "install.sh"), "utf8");
   assert.match(install, /polkit rule can be created/, "should mention the polkit option");
-  assert.match(install, /#caching-the-authorisation/, "should link to the caching section");
+  assert.match(install, /#skipping-the-authentication/, "should link to the skipping section");
 
   const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8");
   assert.ok(
-    /^#{1,6}\s+Caching the authorisation\s*$/m.test(readme),
-    "README should have a 'Caching the authorisation' heading for that link to land on"
+    /^#{1,6}\s+Skipping the authentication\s*$/m.test(readme),
+    "README should have a 'Skipping the authentication' heading for that link to land on"
   );
 });
 

@@ -1,6 +1,6 @@
-// Optional: cache the polkit authorisation for the Lenovo battery conservation
-// helper, so a burst of toggles asks for your password once instead of once per
-// click.
+// Optional: grant a permanent, passwordless polkit authorisation for the
+// Lenovo battery conservation helper, so a burst of toggles never asks for
+// your password at all.
 //
 // Source:  https://github.com/justfortheloveof/omarchy-bar-plugin-power-lenovo-battery-conservation
 // License: MIT, the same terms as Omarchy itself.
@@ -8,17 +8,17 @@
 // If you are reading this in /etc/polkit-1/rules.d, you copied it from that
 // repository. Nothing here is installed by install.sh, and nothing needs it:
 // without it every toggle authenticates, because pkexec uses the stock
-// org.freedesktop.policykit.exec action, which is `auth_admin`, not
-// `auth_admin_keep`. Copy it in only if you would rather not type the password
-// on every click:
+// org.freedesktop.policykit.exec action, which is `auth_admin`.
+// Copy it in only if you accept a permanent passwordless grant for this one
+// write:
 //
 //   sudo cp policy/lenovo-power-conservation.rules.example \
 //        /etc/polkit-1/rules.d/50-lenovo-power-conservation.rules
 //   omarchy-restart-shell
 //
-// To undo that, delete the file: an authorisation cached this way is scoped to
-// one action id and one exact command line, and nothing here is passwordless.
-// The rule only turns AUTH_ADMIN into AUTH_ADMIN_KEEP for the installed helper;
+// To undo that, delete the file: the passwordless grant is scoped to
+// one action id and one exact command line, and nothing else is touched.
+// The rule only turns AUTH_ADMIN into YES for the installed helper;
 // every other program keeps the stock policy and still prompts.
 
 polkit.addRule(function (action, subject) {
@@ -35,5 +35,5 @@ polkit.addRule(function (action, subject) {
   if (!subject.local) return;
   if (!subject.isInGroup("wheel")) return;
 
-  return polkit.Result.AUTH_ADMIN_KEEP;
+  return polkit.Result.YES;
 });
