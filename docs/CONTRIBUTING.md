@@ -77,7 +77,7 @@ tree. The host is untouched.
 prints, the state mapping, and the value check that gates `pkexec`.
 `tests/helper.test.cjs` covers `bin/lenovo-power-conservation`: argument
 validation, exit codes, the write, and the agreement between the helper,
-`install.sh` and `uninstall.sh` about the path they share.
+`install.sh`, `uninstall.sh` and `Panel.qml` about the path they share.
 
 One gap, on purpose. The branch that reports a write the kernel refused needs a
 sysfs attribute that rejects a value, which a plain file cannot be, so that test

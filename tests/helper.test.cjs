@@ -254,7 +254,7 @@ test("the helper says how to remove it", () => {
   assert.match(source, /keeps no state/, "should say it is safe to delete");
 });
 
-test("install.sh, uninstall.sh and the helper agree on the installed path", () => {
+test("install.sh, uninstall.sh, the helper and Panel.qml agree on the installed path", () => {
   // If these drift, the panel elevates a path that does not exist or uninstall
   // deletes the wrong file. Each script composes the full path from a directory
   // constant, so compare the directory and the basename rather than a literal.
@@ -275,6 +275,17 @@ test("install.sh, uninstall.sh and the helper agree on the installed path", () =
   assert.match(
     read("bin/lenovo-power-conservation"),
     /^readonly PACKAGED_PATH=\/usr\/local\/libexec\/lenovo-power\/conservation$/m
+  );
+
+  // The panel keeps the same path as a QML string, for its probe and its pkexec
+  // call. If it drifts, the probe reports "not-installed" forever and nothing
+  // else notices, so compare the full path, not just the directory.
+  const panelHelper = read("Panel.qml").match(/conservationHelper:\s*"([^"]+)"/);
+  assert.ok(panelHelper, "Panel.qml should name the helper path");
+  assert.equal(
+    panelHelper[1],
+    `${expectedDir}/conservation`,
+    "Panel.qml probes a path install.sh does not write"
   );
 });
 
