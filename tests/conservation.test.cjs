@@ -147,11 +147,6 @@ test("describe treats silence as not installed", () => {
   assert.deepEqual({ ...describe("") }, { installed: false, supported: false, active: null });
 });
 
-test("describe ignores a stale value from a machine that stopped matching", () => {
-  assert.deepEqual({ ...describe("") }, { installed: false, supported: false, active: null });
-  assert.equal(describe("").active, null);
-});
-
 test("the helper's status words are the ones this module knows", () => {
   // If bin/lenovo-power-conservation ever changes what it prints, these tests
   // should be the thing that notices.
