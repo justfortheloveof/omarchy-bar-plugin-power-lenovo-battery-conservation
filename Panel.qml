@@ -21,34 +21,28 @@ Panel {
   property int profileIndex: 0
   property bool cursorActive: false
   // ---------- Lenovo battery conservation ----------
-  // State comes from asking the installed helper, which is the only thing in
-  // this plugin that touches the attribute. Every flag below starts pessimistic,
-  // so a probe that never runs leaves a row that is plainly unusable rather than
-  // a toggle that looks live.
+  // The installed helper is the only thing that touches the attribute. Every flag
+  // below starts pessimistic, so a probe that never runs leaves a plainly
+  // unusable row rather than a toggle that looks live.
   readonly property string conservationHelper: "/usr/local/libexec/lenovo-power/conservation"
   property bool conservationInstalled: false
   property bool conservationSupported: false
   property bool conservationKnown: false
   property bool conservationActive: false
   property bool conservationBusy: false
-  // Held until the write process exits, because whether to say anything depends
-  // on an exit code we only learn at the end.
+  // Held until the write process exits: whether to say anything depends on an
+  // exit code we only learn at the end.
   property var conservationErrors: []
-  // Keyboard/hover cursor state. The panel's own navigation is a flat profile
-  // index plus cursorActive, so ours is a plain boolean in the same idiom
-  // rather than a section name: true means the cursor is on our row instead of
-  // the profiles. A boolean rather than an index because updateProfiles
-  // re-clamps profileIndex through parseProfiles every refresh, which would
-  // pull a shared index off our row every five seconds.
+  // Cursor state, in the panel's own idiom: true means the cursor is on our row
+  // instead of the profiles. A boolean rather than a shared index, which
+  // updateProfiles re-clamps on every refresh.
   property bool conservationFocused: false
   // Only a toggle whose current value we actually read may be flipped.
   readonly property bool conservationReady:
     conservationInstalled && conservationSupported && conservationKnown && !conservationBusy
   readonly property string conservationDescription: {
-    // Each not-ready state has to say whether the switch's "off" is a fact or a
-    // guess. Toggle has no indeterminate state, its track is a private id, and
-    // `checked` is a bool, so a disabled row still renders as a normal off
-    // switch. The text is the only place that distinction can live.
+    // A disabled row still renders as an ordinary off switch, so each not-ready
+    // state has to say in text whether "off" is a fact or a guess.
     if (!conservationInstalled) return "Current mode unknown. Run sudo ./install.sh in the plugin directory to enable changes."
     if (!conservationSupported) return "No Lenovo conservation_mode attribute here, so conservation mode is always off."
     if (!conservationKnown) return "Current mode unknown: the attribute reported a value this plugin does not recognise."
@@ -97,9 +91,9 @@ Panel {
   }
 
   // ---------- Lenovo battery conservation ----------
-  // Fold whatever the helper printed into the panel's flags. Anything we cannot
-  // read leaves conservationKnown false, which keeps the row disabled rather
-  // than showing "off" for a state nobody read.
+  // Fold whatever the helper printed into the flags. Anything unreadable leaves
+  // conservationKnown false, which keeps the row disabled rather than showing
+  // "off" for a state nobody read.
   function ingestConservationStatus(raw) {
     var state = Conservation.describe(raw)
     root.conservationInstalled = state.installed
@@ -112,9 +106,9 @@ Panel {
     if (!conservationProbe.running) conservationProbe.running = true
   }
 
-  // Returns the value asked for, or "" if nothing was. The write itself is
-  // asynchronous: pkexec prompts, so the state on screen only changes when
-  // conservationAction reports back.
+  // The value asked for, or "" if nothing was. The write is asynchronous: pkexec
+  // prompts, so the state on screen only changes once conservationAction reports
+  // back.
   function requestConservationToggle() {
     if (!root.conservationReady) return ""
 
@@ -127,9 +121,8 @@ Panel {
     return value
   }
 
-  // Vertical navigation: walk between the profile row and ours, skipping our
-  // row when it is not ready. dx never reaches here, so left/right stay on the
-  // profiles exactly as upstream intends.
+  // Vertical navigation: walk between the profile row and ours, skipping ours
+  // when it is not ready. dx never reaches here, so left/right stay on profiles.
   function moveFocusRow(delta) {
     conservationFocused = Conservation.moveFocusRow(
       conservationFocused,
@@ -139,8 +132,8 @@ Panel {
     )
   }
 
-  // Return/Space on whichever row the cursor is on. Upstream's own entry point
-  // is left byte-identical; this is what the key dispatcher calls instead.
+  // Return/Space on whichever row the cursor is on; the key dispatcher calls
+  // this rather than activateSelectedProfile.
   function activateCursor() {
     if (!root.cursorActive) return
     if (root.conservationFocused) root.requestConservationToggle()
@@ -272,8 +265,8 @@ Panel {
     function toggle() { root.toggle() }
     function togglePercentage() { root.togglePercentage() }
     // ---------- Lenovo battery conservation ----------
-    // Returns the value asked for, not the result: pkexec prompts, so the write
-    // has not happened yet when this replies.
+    // The value asked for, not the result: pkexec prompts, so the write has not
+    // happened yet when this replies.
     function toggleConservation(): string { return root.requestConservationToggle() }
     function conservationStatus(): string {
       if (!root.conservationKnown) return "unknown"
@@ -326,8 +319,8 @@ Panel {
 
   // ---------- Lenovo battery conservation ----------
   // Reading needs no privilege, so this never prompts. The helper's path is
-  // passed as an argument rather than spliced into the string, and the string
-  // itself is fixed, so nothing the caller controls reaches the shell.
+  // passed as an argument, and the string itself is fixed, so nothing the
+  // caller controls reaches the shell.
   Process {
     id: conservationProbe
     command: ["sh", "-c", "if [ -x \"$0\" ]; then exec \"$0\" status; else echo not-installed; fi", root.conservationHelper]
@@ -356,7 +349,7 @@ Panel {
       }
 
       // Re-read rather than trust the write: the helper verifies it, but the
-      // state on screen should come from the attribute, not from what we asked for.
+      // state on screen should come from the attribute, not from what we asked.
       root.conservationBusy = false
       root.refreshConservation()
     }
@@ -650,8 +643,8 @@ Panel {
             checked: root.conservationActive
             enabled: root.conservationReady
             // Same cursor flag the profile Buttons use, which is all the
-            // highlight this needs: Toggle's _hot is
-            // hasCursor || mouse.containsMouse, identical to Button's.
+            // highlight needed: Toggle's _hot is
+            // hasCursor || mouse.containsMouse, same as Button's.
             hasCursor: root.cursorActive && root.conservationFocused
             onHovered: function(h) {
               if (!h || !Conservation.hoverClaimsFocus(root.conservationReady)) return

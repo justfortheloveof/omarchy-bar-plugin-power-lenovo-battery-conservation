@@ -1,9 +1,5 @@
 # Everything bin/check runs locally, minus the stages that need an Omarchy box.
-#
-# The Qt tools install is best-effort. If it fails, or if qmllint lands somewhere
-# not on PATH, bin/check skips the lint stage and says so rather than failing the
-# run. A skipped stage is not a green stage, which is why bin/check prints the
-# count.
+# Skipped stages are not green stages, which is why bin/check prints the count.
 name: check
 
 on:
@@ -14,43 +10,32 @@ jobs:
   check:
     runs-on: ubuntu-latest
 
-    # Only the checkout below needs a token, and only to clone. Stating this
-    # beats inheriting the repository default, which differs between repos
-    # created before and after GitHub changed it in 2023 - and it keeps the
-    # blast radius of bin/check, which runs code out of the pull request, at
-    # read-only. Naming one scope sets every other scope to none, which is the
-    # point: a step that quietly wanted more now fails instead of getting it.
+    # Only the checkout below needs a token, and only to clone. Naming one scope
+    # sets every other scope to none, so a step that quietly wanted more fails
+    # instead of getting it: bin/check runs code out of the pull request.
     permissions:
       contents: read
 
-    # Nothing here is interactive and a green run is a few seconds of work.
-    # Without this, one hung step costs the 360-minute default.
+    # Nothing here is interactive, so a hung step should not cost the 360-minute
+    # default.
     timeout-minutes: 15
 
     steps:
-      # Pinned to a commit, not the v7 tag. A tag is a name that moves, and a
-      # moved tag is code this repository never reviewed; the checkout v7.0.1
-      # release is not marked immutable. v7 is current for both of these and
-      # runs on the node24 runtime that Node 20's retirement forced them onto.
-      # Dependabot keeps the pins fresh - see .github/dependabot.yml - because
-      # a pin nobody updates is worse than a tag.
+      # Pinned to a commit, not the v7 tag: a moved tag is code this repository
+      # never reviewed. Dependabot keeps the pins fresh - see
+      # .github/dependabot.yml - because a pin nobody updates is worse than a tag.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Nothing here pushes. Leaving a token in the environment for
-          # bin/check - which runs code from the checkout - to read buys
-          # nothing, and v6+ keeps it in $RUNNER_TEMP rather than .git/config
-          # regardless.
+          # Nothing here pushes, and v6+ keeps the token in $RUNNER_TEMP rather
+          # than .git/config regardless.
           persist-credentials: "false"
 
-      # Pinning Node is also what stops the runner image's default Node from
-      # drifting under the tests the way its OS now will. Dropping this step
-      # would hand that back.
+      # Pin Node so the runner image's default cannot drift under the tests.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
-          # There is no package.json and no lockfile here. setup-node v5 added
-          # package-manager auto-caching and v6 narrowed it to npm, so with
-          # nothing to detect it goes looking for a lockfile we do not have.
+          # There is no package.json or lockfile here, and setup-node v6 would
+          # otherwise go looking for one to cache.
           package-manager-cache: "false"
 
       # qmllint, for the Panel.qml parse check. Ubuntu does not put Qt's bin
@@ -67,23 +52,11 @@ jobs:
             fi
           done
 
-      # The helper tests fake root with `unshare -r`. Ubuntu 24.04 sets
-      # kernel.apparmor_restrict_unprivileged_userns=1 and ships no AppArmor
-      # profile for unshare, so the unshare itself fails with "Operation not
-      # permitted" and exits 1 (LP #2046477) - which would leave the privileged
-      # half of the helper untested while looking like six assertion failures.
-      # This relaxes AppArmor in this ephemeral runner and nothing else.
-      #
-      # `|| true` because runs-on is left on ubuntu-latest, which migrates to
-      # Ubuntu 26.04 between 2026-10-19 and 2026-11-19, and that image may well
-      # permit the namespace natively by then. A sysctl that is unnecessary and
-      # unwritable should not be able to fail the run; the gate below is what
-      # actually decides.
-      #
-      # The `unshare -r true` is therefore the only thing that has to succeed.
-      # Do not assume the sysctl took, and do not make this step best-effort:
-      # if userns is genuinely unavailable the run goes red here, at a named
-      # step, rather than quietly testing six fewer things.
+      # The helper tests fake root with `unshare -r`, which Ubuntu 24.04's
+      # AppArmor refuses by default (LP #2046477); the sysctl relaxes that, and
+      # `|| true` because a later image may allow it natively. The `unshare -r
+      # true` is the gate: if userns is genuinely unavailable the run goes red
+      # here, at a named step, rather than quietly testing fewer things.
       - name: Allow `unshare -r` for the helper tests
         run: |
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
@@ -96,13 +69,8 @@ jobs:
           fi
           bin/check
 
-      # CI has no Omarchy, so the manifest validation and the shell API stages
-      # are always skipped here. Both still run for anyone who clones the repo on
-      # an Omarchy box. bin/check lists them in its summary, so a run that
-      # skipped something never reads as fully green.
-      #
-      # The Model.js comparison does run here: tools/sync-upstream --check runs
-      # earlier in bin/check and fetches the blobless upstream mirror it needs.
-      # That costs a network fetch of basecamp/omarchy per run, and it is what
-      # keeps the Model.js invariant enforced by CI rather than by whoever
-      # remembers to run bin/check locally.
+      # CI has no Omarchy, so the manifest validation and shell API stages are
+      # always skipped here; bin/check lists them so a skipped run never reads
+      # as fully green. The Model.js comparison does run (sync-upstream --check
+      # fetches its mirror), keeping that invariant enforced by CI rather than
+      # by whoever remembers to run bin/check locally.

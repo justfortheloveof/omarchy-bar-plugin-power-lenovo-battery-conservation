@@ -1,12 +1,8 @@
-# Keeps the SHA-pinned actions in .github/workflows/check.yml current.
-#
-# The pins are the point - a tag can move under us - but a pin nobody updates
-# eventually holds a release with known fixes, which is the same problem in a
-# slower form. Dependabot opens the bump, rewrites the SHA and keeps the
-# trailing version comment, so the pin stays both immutable and current.
-#
-# Its pull requests trigger this repository's own check workflow, so a broken
-# action bump fails here rather than in the next unrelated run.
+# Keeps the SHA-pinned actions in .github/workflows/check.yml current: a tag can
+# move under us, but a pin nobody updates holds a release with known fixes.
+# Dependabot rewrites the SHA and keeps the trailing version comment, so the pin
+# stays both immutable and current. Its pull requests trigger the check workflow,
+# so a broken action bump fails here rather than in the next unrelated run.
 version: 2
 updates:
   - package-ecosystem: "github-actions"

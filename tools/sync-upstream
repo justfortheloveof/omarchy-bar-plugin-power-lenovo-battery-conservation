@@ -2,25 +2,22 @@
 #
 # Merge the first-party omarchy.power plugin into this fork.
 #
-# A panel builds its own contents inline; there is no API for another plugin to
-# add a section to one, so omarchy.clonedFrom is the only supported way to
-# change a built-in panel, and it replaces the original rather than layering on
-# top (enabling the clone disables the source; removing it restores it). So this
-# repository is a copy of shell/plugins/panels/power/ with our own additions,
-# and the only real cost of that choice is staying in step with upstream.
+# A panel builds its own contents inline and offers no API for another plugin to
+# add a section to one, so omarchy.clonedFrom is the only supported way to change
+# a built-in panel, and it replaces the original rather than layering on top. This
+# repository is therefore a copy of shell/plugins/panels/power/ with our own
+# additions, and staying in step with upstream is the only real cost of that.
 #
-# Why not `git rebase`: the shell only finds a third-party plugin whose
-# manifest.json is at the top level of ~/.config/omarchy/plugins/<id>/, so
-# Panel.qml has to be at the root of this repository. Upstream keeps the same
-# file at shell/plugins/panels/power/Panel.qml. Git can only merge paths that
-# exist on both sides, so there is no shared ancestor to rebase onto.
+# Not `git rebase`: the shell only finds a plugin whose manifest.json sits at the
+# top level of ~/.config/omarchy/plugins/<id>/, so Panel.qml has to be at the
+# root of this repository, while upstream keeps the same file under
+# shell/plugins/panels/power/. Git can only merge paths that exist on both sides,
+# so there is no shared ancestor to rebase onto.
 #
-# So do the merge by hand, against the commit pinned in upstream.lock. For each
-# file git merge-file does a three-way merge: ours, the pinned base, and the
-# current upstream tip. That is the same merge rebase runs internally. Changes
-# that do not overlap combine on their own; only real conflicts stop for you.
-#
-# This is a development-time tool. The installed plugin never runs it.
+# So the merge is done by hand, against the commit pinned in upstream.lock: ours,
+# the pinned base, and the current upstream tip. Changes that do not overlap
+# combine on their own; only real conflicts stop for you. Development-time only,
+# the installed plugin never runs this.
 #
 # Usage: tools/sync-upstream [--check]
 
@@ -90,17 +87,11 @@ ensure_mirror() {
 }
 
 fetch_upstream() {
-	# --filter=blob:none keeps the mirror at a few MB; git fetches the
-	# individual file blobs on demand when we `git show` them below.
-	#
-	# Explicit refspec, so origin/$UPSTREAM_BRANCH exists afterwards whatever
-	# refspec the mirror's remote was configured with. With a bare branch name,
-	# git only opportunistically updates a remote-tracking ref when the
-	# configured refspec maps that branch, and OMARCHY_UPSTREAM_MIRROR can point
-	# at a `git clone --mirror` mirror, whose refspec is +refs/*:refs/*. There a
-	# bare `git fetch origin v4-0-4` writes refs/heads/v4-0-4, and the
-	# `git rev-parse origin/v4-0-4` below then fails on a mirror that fetched
-	# the right commit perfectly well.
+	# --filter=blob:none keeps the mirror at a few MB; git fetches the file blobs
+	# on demand when we `git show` them below. An explicit refspec is used so
+	# origin/$UPSTREAM_BRANCH exists afterwards whatever refspec the mirror's
+	# remote was configured with: with a bare branch name git only updates a
+	# remote-tracking ref when the refspec maps it, and a --mirror mirror's does not.
 	upstream_git fetch --quiet --filter=blob:none origin \
 		"+refs/heads/$UPSTREAM_BRANCH:refs/remotes/origin/$UPSTREAM_BRANCH" ||
 		die "could not fetch $UPSTREAM_BRANCH from $UPSTREAM_REPO. Check the branch name against 'git ls-remote --heads $UPSTREAM_REPO': it should be the release branch for the omarchy you have installed, not omarchy's development branch."
@@ -127,13 +118,11 @@ upstream_file() {
 # installed omarchy vs the lock
 # ---------------------------------------------------------------------------
 
-# The lock's branch names the release for the omarchy this machine runs. Say so
-# when it does not, because "update omarchy first, then merge" is only
-# enforceable if the tool knows which side of that swap you are on.
-#
-# Warns rather than dies: the point is to catch a stale lock, not to make a
-# fork of an older omarchy unsyncable. Off-box there is no omarchy to compare
-# against, so this stays quiet.
+# The lock's branch names the release for the omarchy this machine runs, so say
+# so when it does not: "update omarchy first, then merge" is only enforceable if
+# the tool knows which side of that swap you are on. Warns rather than dies, since
+# the point is to catch a stale lock, not to make an older omarchy unsyncable, and
+# stays quiet off-box where there is no omarchy to compare against.
 installed_branch() {
 	local version
 
@@ -235,9 +224,9 @@ main() {
 		case "$arg" in
 		--check) check_only=1 ;;
 		-h | --help)
-			# Print this file's header comment, so the usage text cannot drift
-			# out of sync with the code implementing it. Stops at the first line
-			# after the shebang that is not a comment.
+		# Print this file's header comment, so the usage text cannot drift out of
+		# sync with the code implementing it. Stops at the first line after the
+		# shebang that is not a comment.
 			awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"
 			return 0
 			;;
@@ -275,8 +264,7 @@ main() {
 	if [[ $BASE_SHA == "$TIP_SHA" ]]; then
 		note "Already up to date with $UPSTREAM_BRANCH."
 		# Still worth reporting: "what has this fork changed?" is the question
-		# --check exists to answer, and it is most useful precisely when there
-		# is nothing new upstream to merge.
+		# --check exists to answer, and there is nothing new to merge here.
 		if ((check_only)); then
 			note ""
 			report

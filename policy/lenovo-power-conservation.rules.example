@@ -6,12 +6,9 @@
 // License: MIT, the same terms as Omarchy itself.
 //
 // If you are reading this in /etc/polkit-1/rules.d, you copied it from that
-// repository, or from the plugin's policy/ directory. Removing the file removes
-// the authorisation; nothing else is left behind.
-//
-// This file is NOT installed by install.sh, and nothing needs it. Without it
-// every toggle authenticates, because pkexec uses the stock
-// org.freedesktop.policykit.exec action and that is `auth_admin`, not
+// repository. Nothing here is installed by install.sh, and nothing needs it:
+// without it every toggle authenticates, because pkexec uses the stock
+// org.freedesktop.policykit.exec action, which is `auth_admin`, not
 // `auth_admin_keep`. Copy it in only if you would rather not type the password
 // on every click:
 //
@@ -19,14 +16,10 @@
 //        /etc/polkit-1/rules.d/50-lenovo-power-conservation.rules
 //   omarchy-restart-shell
 //
-// And to undo that, delete the file. That is the point: an authorisation cached
-// this way is scoped to one action id and one exact command line, and removing
-// the file removes it. Nothing here is permanent and nothing is passwordless.
-//
-// What it deliberately does not do is grant anything by itself. It only turns
-// AUTH_ADMIN into AUTH_ADMIN_KEEP for commands that are already the installed
-// helper; every other program on the system keeps the stock policy and still
-// prompts.
+// To undo that, delete the file: an authorisation cached this way is scoped to
+// one action id and one exact command line, and nothing here is passwordless.
+// The rule only turns AUTH_ADMIN into AUTH_ADMIN_KEEP for the installed helper;
+// every other program keeps the stock policy and still prompts.
 
 polkit.addRule(function (action, subject) {
   if (action.id !== "org.freedesktop.policykit.exec") return;

@@ -1,39 +1,22 @@
 # Merge base for tools/sync-upstream.
 #
-# sha tracks the omarchy that is INSTALLED, not the tip of the release branch.
-# That distinction matters: a cloned first-party panel is not self-contained. It
-# imports types and singleton members the shell provides, so panel code from a
-# newer omarchy can reference shell API this machine does not have. Two examples
-# that broke this fork by running ahead:
+# sha tracks the omarchy that is INSTALLED, not the tip of the release branch: the
+# panel is not self-contained, it imports shell-provided types and members, so
+# panel code from a newer omarchy can reference API this machine lacks. Update
+# omarchy first, then run tools/sync-upstream; until then --check reporting drift
+# is information, not an action item.
 #
-#   c231097d  introduced ShellIpc and its qmldir entry. Used from a plugin, which
-#             lives outside the shell's tree, it does not resolve: "ShellIpc is
-#             not a type", and the widget silently vanishes from the bar.
-#   b18ab495  introduced Style.duration() and Style.reduceMotion. Style exists,
-#             so these fail as missing members rather than failing to load.
-#
-# So: update omarchy first, then run tools/sync-upstream to advance this. Until
-# then, --check reporting drift is correct information, not an action item.
-# bin/check enforces the result; see its shell API stage.
-#
-# branch is the RELEASE branch for the omarchy you have installed, not omarchy's
-# development branch. `quattro` is upstream's default HEAD and rolls forward
-# continuously, so merging against it pulls in work no released omarchy has yet,
-# which is exactly the failure described above. Each release has its own branch,
-# and they form a fast-forward chain (v4-0-1 is an ancestor of v4-0-2, and so on),
-# so after `omarchy update` the pin walks forward from one release to the next
-# rather than needing a new base.
-#
-# tools/sync-upstream --check warns when branch= does not match the omarchy this
-# machine has installed, which is how "update omarchy first" gets checked instead
-# of just documented.
+# branch is the RELEASE branch for the installed omarchy, not the development
+# branch: `quattro` is upstream's default HEAD and rolls forward continuously, so
+# merging against it pulls in work no released omarchy has. Releases form a
+# fast-forward chain, so after `omarchy update` the pin walks forward, and
+# --check warns when branch= does not match the installed omarchy.
 #
 # path  where the first-party plugin lives in the omarchy tree.
 # repo  branch  where to fetch from.
 #
 # Only tools/sync-upstream should change sha, and only after a conflict-free
-# merge. Editing it by hand to skip a version silently discards every upstream
-# change in between.
+# merge; editing it by hand to skip a version discards the changes in between.
 sha=c668141e9c42b13c80c9ca4ea108e11708c5e8a5
 path=shell/plugins/panels/power
 repo=https://github.com/basecamp/omarchy.git

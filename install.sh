@@ -1,13 +1,8 @@
 #!/bin/bash
 #
-# Install the root-owned half of the Lenovo power plugin.
-#
-# The panel reads conservation mode unprivileged, so it works the moment the
-# plugin is enabled. Writing it does not: the kernel attribute is root-owned,
-# and the only thing this plugin will ever ask to be elevated is the copy of
-# bin/lenovo-power-conservation that this script puts here.
-#
-# Run once, with sudo. Nothing else in the plugin needs privilege.
+# Install the root-owned half of the Lenovo power plugin. The panel reads
+# conservation mode unprivileged, so it works the moment the plugin is enabled;
+# writing it needs root, and the helper copied here is the only thing elevated.
 #
 #   sudo ./install.sh
 #   sudo ./uninstall.sh    # to remove it again
@@ -17,8 +12,8 @@ set -euo pipefail
 readonly PACKAGED_DIR=/usr/local/libexec/lenovo-power
 readonly PACKAGED_PATH="$PACKAGED_DIR/conservation"
 
-# Printed at the end, when the password prompt the user has just seen is the
-# thing most likely to make them want to know a polkit rule exists.
+# Printed at the end, when the password prompt the user has just seen makes a
+# polkit rule worth mentioning.
 readonly REPO_URL=https://github.com/justfortheloveof/omarchy-bar-plugin-power-lenovo-battery-conservation
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -34,7 +29,7 @@ die() {
 
 [[ -f $SOURCE_PATH ]] || die "cannot find $SOURCE_PATH"
 
-# Not fatal. Installing on a machine without the attribute is how you find out
+# Not fatal: installing on a machine without the attribute is how you find out
 # the panel says "unsupported" rather than failing to load.
 if ! compgen -G '/sys/bus/platform/drivers/ideapad_acpi/*/conservation_mode' >/dev/null; then
 	printf 'Warning: no ideapad_acpi conservation_mode attribute on this machine.\n' >&2
@@ -50,9 +45,8 @@ install -d -m 0755 -o root -g root "$PACKAGED_DIR"
 # has to be traversable and executable by them. It is not writable by them.
 install -m 0755 -o root -g root "$SOURCE_PATH" "$PACKAGED_PATH"
 
-# Confirm what actually landed rather than trusting install's exit status: this
-# file is about to be run as root, so its ownership and mode are the security
-# properties that matter.
+# Confirm what landed rather than trusting install's exit status: this file is
+# about to run as root, so ownership and mode are the properties that matter.
 owner=$(stat -Lc '%U' "$PACKAGED_PATH") || die "cannot stat $PACKAGED_PATH"
 mode=$(stat -Lc '%a' "$PACKAGED_PATH") || die "cannot stat $PACKAGED_PATH"
 

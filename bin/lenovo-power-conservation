@@ -4,26 +4,16 @@
 #
 # Source:   https://github.com/justfortheloveof/omarchy-bar-plugin-power-lenovo-battery-conservation
 # License:  MIT, the same terms as Omarchy itself.
-# Installed by install.sh from that repository. Removed by uninstall.sh from
-# the same repository, or by deleting the file, since it keeps no state.
+# Installed by install.sh from that repository. Removed by uninstall.sh from the
+# same repository, or by deleting the file, since it keeps no state.
 #
-# If you are reading this in /usr/local/libexec/lenovo-power/conservation and
-# wondering where it came from: that repository, and that is the only thing it
-# does. It is root-owned and not writable by anyone else, which is the point.
+# The only part of the plugin that runs as root, and the installed copy is the
+# only thing the plugin asks to be elevated.
 #
-# This is the only part of the plugin that ever runs as root, and that installed
-# copy is the only thing the plugin ever asks to be elevated.
-#
-# What makes that worth doing is what this script does *not* accept. It takes no
-# path from its caller: it resolves the kernel attribute itself, from a glob
-# fixed below. And it writes only the two values the attribute can hold. So a
-# caller who has reached this point, even a caller who has rewritten every file
-# in the plugin's directory, can cause exactly one of two writes to one firmware
-# attribute. That is the whole trust boundary.
-#
-# Nothing here re-executes itself. `set` requires already being root, so there
-# is no path by which a copy sitting in a user-writable directory elevates
-# itself; the caller has to name the installed path to pkexec deliberately.
+# The trust boundary: it takes no path from its caller - it resolves the kernel
+# attribute itself, from the glob fixed below - and it writes only the two values
+# that attribute can hold. Nothing re-executes itself either, `set` requiring
+# root already, so a copy in a user-writable directory cannot elevate itself.
 #
 # Usage:
 #   lenovo-power-conservation status
@@ -48,10 +38,9 @@ readonly EXIT_USAGE=2
 readonly EXIT_UNSUPPORTED=3
 readonly EXIT_UNKNOWN=4
 
-# pkexec sanitises the environment, but pin PATH and the locale anyway so that a
-# direct root invocation cannot resolve a helper out of a writable directory and
-# so validation does not shift with an inherited locale. Same reasoning as
-# omarchy-dns.
+# pkexec sanitises the environment, but pin PATH and the locale anyway so a
+# direct root invocation cannot resolve a helper out of a writable directory, and
+# so validation does not shift with an inherited locale. Same as omarchy-dns.
 if ((EUID == 0)); then
 	export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 	export LC_ALL=C.UTF-8
@@ -98,9 +87,8 @@ cmd_status() {
 		return "$EXIT_OK"
 		;;
 	*)
-		# Present but unrecognised. Not the same as off, and deliberately not
-		# reported as off: a caller that cannot read the state should not
-		# conclude anything about it.
+		# Present but unrecognised, and deliberately not reported as off: a
+		# caller that cannot read the state should not conclude anything.
 		printf 'unknown\n'
 		return "$EXIT_UNKNOWN"
 		;;

@@ -30,10 +30,6 @@ node --test tests/conservation.test.cjs tests/helper.test.cjs
 # ---------------------------------------------------------------------------
 # Where this fork sits against upstream. Never gates: there is nothing to fail,
 # it is only ever information.
-#
-# Runs before the Model.js comparison below, because it is what creates the
-# mirror that stage needs. The other order reads as though the stage is only
-# available offline, which is why it used to skip here and in CI.
 # ---------------------------------------------------------------------------
 if [ -x tools/sync-upstream ]; then
 	echo
@@ -41,13 +37,9 @@ if [ -x tools/sync-upstream ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Model.js must stay byte-identical to upstream. The README says it is
-# unchanged, and every line this fork added to it would be a line that can
-# conflict when upstream edits the same file. Upstream also tests it in
+# Model.js must stay byte-identical to upstream: the README calls it unchanged,
+# any edit here can conflict on the next sync, and upstream tests it in
 # test/shell.d/power-test.sh, so churn there is noise for them too.
-#
-# Now that sync-upstream has run above, the mirror exists, so this stage runs
-# on CI too rather than skipping every run.
 # ---------------------------------------------------------------------------
 pinned=$(sed -n 's/^sha=//p' upstream.lock)
 mirror=${OMARCHY_UPSTREAM_MIRROR:-${TMPDIR:-/tmp}/omarchy-power-lenovo-battery-conservation-upstream.git}
@@ -67,13 +59,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Panel.qml against the shell API this machine actually has.
-#
-# A cloned first-party panel is not self-contained: it imports types and
-# singleton members the shell provides. Panel.qml taken from a newer omarchy
-# can therefore reference API that does not exist here, and the symptom is a
-# widget that silently fails to load rather than an error anyone sees. Two
-# separate checks, because the two failures surface differently.
+# Panel.qml against the shell API this machine actually has. A cloned
+# first-party panel is not self-contained, it imports types and singleton members
+# the shell provides, so a Panel.qml from a newer omarchy can reference API this
+# machine lacks - and the symptom is a widget that silently fails to load.
 # ---------------------------------------------------------------------------
 SHELL_DIR=/usr/share/omarchy/shell
 
@@ -96,12 +85,8 @@ if [ ! -d "$SHELL_DIR" ]; then
 else
 	# Stage 1: Style members. qmllint structurally cannot catch these: Style
 	# resolves, so a missing member looks like the same missing-property noise it
-	# reports for unresolved components. Check the source instead.
-	#
-	# Needs only $SHELL_DIR, which is why this is a stage of its own and not
-	# bundled with the qmllint run below. Gating it on qmllint made it skip on
-	# every box where Qt is installed but not linked into PATH, reporting a stage
-	# that had everything it needed.
+	# reports for unresolved components. Check the source instead. Needs only
+	# $SHELL_DIR, which is why it is not bundled with the qmllint run below.
 	missing_style=""
 	for member in $(grep -oE '\bStyle\.[a-zA-Z_][a-zA-Z0-9_]*' Panel.qml | sed 's/^Style\.//' | sort -u); do
 		grep -qE "(property|readonly property|function)[[:space:]].*\b$member\b" "$SHELL_DIR/Commons/Style.qml" ||
@@ -124,8 +109,7 @@ else
 		# Stage 2: type resolution. qmllint reports an unresolvable type as
 		#    "X was not found"; that is the check that catches a panel referencing
 		#    shell API newer than the install. signal-handler-parameters is excluded
-		#    because upstream's own file produces it (QProcess::ExitStatus), so it
-		#    is noise rather than a finding.
+		#    because upstream's own file produces it (QProcess::ExitStatus).
 		lint_output=$("$qmllint_cmd" -I "$qsimport" Panel.qml 2>&1) && lint_status=0 || lint_status=$?
 
 		unresolved=$(grep 'was not found' <<<"$lint_output" | grep -v '\[signal-handler-parameters\]' || true)

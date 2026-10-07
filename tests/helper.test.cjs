@@ -1,15 +1,15 @@
 // Tests for bin/lenovo-power-conservation - run with:
 //   node --test tests/helper.test.cjs
 //
-// The helper hardcodes its sysfs glob and its installed path, both on purpose,
-// so the tests work on a copy with those two constants rewritten to point into a
-// temporary tree. What is under test is the argument validation, the value
-// parsing and the read-back, not the literal paths.
+// The helper hardcodes its sysfs glob and its installed path, both on purpose, so
+// the tests run a copy with those two constants rewritten into a temporary tree.
+// Under test are the argument validation, the value parsing and the read-back,
+// not the literal paths.
 //
 // The write path needs to look like root, which is what `unshare -r` is for: a
 // user namespace where the caller is uid 0. That exercises the real privileged
-// branch, including the PATH pin and the read-back, without root on the host and
-// without touching /sys.
+// branch, including the PATH pin and the read-back, with no root on the host and
+// nothing on /sys touched.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -19,19 +19,11 @@ const { spawnSync } = require("node:child_process");
 
 const HELPER = path.join(__dirname, "..", "bin", "lenovo-power-conservation");
 
-// `unshare -r` is how this file fakes root. Probe it once, up front, and keep
-// the answer.
-//
-// Without this, a host that forbids unprivileged user namespaces fails every
-// asRoot assertion below by handing back *unshare's* exit code. unshare exits 1,
-// so `set 2` - which the helper refuses at its argument check, before it ever
-// looks at EUID - reports 1 instead of 2. That reads as a helper bug rather than
-// a missing namespace, and it is exactly how CI went red with six misleading
-// diffs and no mention of unshare.
-//
+// How this file fakes root. Probed once, up front, and the answer kept: without
+// it, a host that forbids unprivileged user namespaces hands back *unshare's*
+// exit code instead of the helper's, and every asRoot assertion below misreads.
 // Ubuntu 24.04 sets kernel.apparmor_restrict_unprivileged_userns=1 and ships no
-// AppArmor profile for unshare, so the unshare itself is refused with
-// "Operation not permitted" (LP #2046477).
+// AppArmor profile for unshare, so the unshare is refused (LP #2046477).
 const ROOT_SIM = (() => {
   const probe = spawnSync("unshare", ["-r", "true"], { encoding: "utf8" });
 
@@ -72,8 +64,8 @@ function harness({ value } = {}) {
 
   const run = (args, { asRoot = false } = {}) => {
     // Fail here, with the remedy, rather than letting unshare's exit code
-    // masquerade as the helper's. Deliberately not a throw at module scope:
-    // the tests that need no root are still worth running, and still passing.
+    // masquerade as the helper's. Not a throw at module scope: the tests needing
+    // no root are still worth running, and still passing.
     if (asRoot && !ROOT_SIM.ok) {
       throw new Error(
         `root simulation unavailable, so the helper's privileged branch cannot be ` +
@@ -204,12 +196,8 @@ test("set refuses when there is no attribute to write", () => {
 
 test("the helper checks the write instead of trusting it", () => {
   // Not behavioural: making a write fail needs a sysfs attribute that refuses a
-  // value, and a plain file cannot be one. Inside `unshare -r` we are root in
-  // the namespace, so file modes do not stop us either (chattr +i and a
-  // read-only bind mount are both denied here).
-  //
-  // So assert the check is present, which fails loudly if it is ever dropped:
-  // the helper re-reads what it wrote and errors if the kernel did not keep it.
+  // value, and a plain file cannot be one, so assert the check is present: the
+  // helper re-reads what it wrote and errors if the kernel did not keep it.
   const source = fs.readFileSync(HELPER, "utf8");
   assert.match(source, /cat -- "\$path"/, "should read the attribute back");
   assert.match(source, /\[\[ \$confirm != "\$value" \]\]/, "should compare what came back");
@@ -242,14 +230,11 @@ test("the helper carries the marker uninstall.sh looks for", () => {
 });
 
 test("the privileged files name where they came from", () => {
-  // These two are the only files that land outside the repository: the helper
-  // in /usr/local/libexec, the rules example in /etc/polkit-1/rules.d. Once
-  // installed, nothing about either tells a sysadmin where to find the source,
-  // so both have to say so themselves.
-  //
-  // install.sh and uninstall.sh are deliberately not in this list: they run
-  // from the repository and leave nothing behind, so nobody reads them on the
-  // installed system.
+  // These two are the only files that land outside the repository (the helper in
+  // /usr/local/libexec, the rules example in /etc/polkit-1/rules.d), so once
+  // installed nothing tells a sysadmin where to find the source, and both have
+  // to say so themselves. install.sh and uninstall.sh run from the repository
+  // and leave nothing behind, so they are not in this list.
   const repo = "https://github.com/justfortheloveof/omarchy-bar-plugin-power-lenovo-battery-conservation";
 
   for (const f of [

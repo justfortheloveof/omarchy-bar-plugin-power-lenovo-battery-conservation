@@ -15,9 +15,9 @@ readonly PACKAGED_PATH="$PACKAGED_DIR/conservation"
 readonly RULES_PATH=/etc/polkit-1/rules.d/50-lenovo-power-conservation.rules
 
 # The rules file is a verbatim copy of the plugin's
-# policy/lenovo-power-conservation.rules.example, so this line is in it.
-# Checking it before a root-owned rm does two things at once: proves the file is
-# ours, and re-confirms its provenance while we are standing next to it.
+# policy/lenovo-power-conservation.rules.example, so this line is in it. Checking
+# it before a root-owned rm proves the file is ours and re-confirms where it came
+# from.
 readonly RULES_MARKER='https://github.com/justfortheloveof/omarchy-bar-plugin-power-lenovo-battery-conservation'
 
 die() {
@@ -28,7 +28,7 @@ die() {
 ((EUID == 0)) || die "run this with sudo: sudo $0"
 
 # Recorded before anything is removed, so the closing line can say what this run
-# actually left behind rather than what happens to be on disk by then.
+# left behind rather than what happens to be on disk by then.
 helper_was_installed=0
 
 if [[ ! -e $PACKAGED_PATH ]]; then
@@ -36,8 +36,8 @@ if [[ ! -e $PACKAGED_PATH ]]; then
 else
 	helper_was_installed=1
 
-	# Refuse to delete a file we cannot identify. The path is plugin-specific,
-	# but this is a root-owned rm and the check costs one grep.
+	# Refuse to delete a file we cannot identify: this is a root-owned rm and the
+	# check costs one grep.
 	if ! grep -qF 'lenovo-power-conservation: installed by' "$PACKAGED_PATH"; then
 		die "$PACKAGED_PATH does not look like our helper; leaving it alone"
 	fi
@@ -49,8 +49,8 @@ fi
 rmdir "$PACKAGED_DIR" 2>/dev/null && printf 'Removed %s\n' "$PACKAGED_DIR"
 
 # The rules file is opt-in and install.sh never puts it there, so it is offered
-# rather than taken. Worth offering: left behind, it keeps a cached
-# authorisation pointing at a helper that is no longer there.
+# rather than taken. Left behind, it keeps a cached authorisation pointing at a
+# helper that is no longer there.
 if [[ -e $RULES_PATH ]]; then
 	printf '\nAlso present:\n  %s\n' "$RULES_PATH"
 	printf 'It caches the authorisation for this helper. Remove it as well? [y/N] '
@@ -59,8 +59,8 @@ if [[ -e $RULES_PATH ]]; then
 	if [[ -t 0 ]]; then
 		read -r reply || reply=""
 	else
-		# No terminal to ask on, so do not block waiting for an answer nobody
-		# can give. Same reasoning as omarchy-dns falling through to pkexec.
+		# No terminal to ask on, so do not block waiting for an answer nobody can
+		# give. Same as omarchy-dns falling through to pkexec.
 		printf '\n'
 	fi
 
