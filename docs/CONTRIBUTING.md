@@ -1,5 +1,175 @@
 # Contributing
 
+## Where things live
+
+| Path | |
+| --- | --- |
+| `Panel.qml` | the forked power panel: installed upstream plus our additions |
+| `Model.js` | upstream, unchanged, and must stay that way |
+| `Conservation.js` | pure logic for panel state and navigation: turning the helper's output into state, and moving the keyboard cursor between rows |
+| `manifest.json` | plugin id, `clonedFrom: omarchy.power` |
+| `bin/lenovo-power-conservation` | the only thing that runs as root |
+| `install.sh`, `uninstall.sh` | one-time privileged setup, and its removal; `uninstall.sh` also offers to remove the polkit rule |
+| `policy/lenovo-power-conservation.rules.example` | optional passwordless grant, never installed automatically; copied by hand to `/etc/polkit-1/rules.d/50-lenovo-power-conservation.rules` |
+| `upstream.lock` | pinned merge base and fetch coordinates |
+| `tools/sync-upstream` | the three-way merge against upstream |
+| `tests/` | both suites |
+
+## Relationship to upstream
+
+`Panel.qml` and `Model.js` are a copy of `shell/plugins/panels/power/` from
+[basecamp/omarchy][omarchy]. `Model.js` is unchanged; `Panel.qml` is the
+installed omarchy's panel plus the conservation section. `manifest.json` is the
+only other upstream file this fork changes. `Conservation.js`, `bin/`, `policy/`
+and `tests/` are new.
+
+`manifest.json` declares `omarchy.clonedFrom: omarchy.power`, which is how
+Omarchy lets a plugin replace a built-in one. A panel builds its own contents
+inline; there is no API for another plugin to add a section to one, and
+`clonedFrom` replaces the original rather than layering on top of it. The
+alternative to forking is a separate bar widget with its own panel and IPC
+target, which sits beside the Power panel instead of inside it.
+
+`Panel.qml` keeps `moduleName` and `ipcTarget` at `omarchy.power` on purpose:
+`clonedFrom` is what routes IPC and the bar slot, so rewriting those two
+identifiers would detach the widget from its place in the bar and break
+`omarchy-shell omarchy.power`.
+
+[omarchy]: https://github.com/basecamp/omarchy
+
+## Keeping `Panel.qml` mergeable
+
+`Panel.qml` is upstream's. Everything this fork adds is an insertion, never an
+edit of a line upstream owns, and every block is marked:
+
+```qml
+// ---------- Lenovo battery conservation ----------
+```
+
+The merge is clean whenever the two sides do not share a line, so:
+
+- Adding a whole new `Process { }`, function, or panel section is free.
+- Changing a line upstream is also changing costs a conflict every time.
+- Reformatting, reordering, or tidying upstream code costs a conflict forever
+  and buys nothing.
+
+Do not reformat `Model.js` unless a feature needs it. Upstream tests it in
+`test/shell.d/power-test.sh`, so churn there makes future merges noisy.
+
+The only edits inside code upstream owns are two methods appended to the existing
+`IpcHandler` block, and the panel key dispatcher's `onMoveRequested` and
+`onActivateRequested` handlers. If you add another, append it after those.
+
+**Check a change stays mergeable rather than assuming it.** Three-way merge
+`Panel.qml` against a deliberately adversarial upstream:
+
+```bash
+sha=$(sed -n 's/^sha=//p' upstream.lock)
+git --git-dir=/tmp/omarchy-power-lenovo-battery-conservation-upstream.git \
+    show "$sha:shell/plugins/panels/power/Panel.qml" > /tmp/base.qml
+cp /tmp/base.qml /tmp/theirs.qml   # then add an upstream edit to theirs.qml
+git merge-file --diff3 -p Panel.qml /tmp/base.qml /tmp/theirs.qml > /tmp/merged.qml
+```
+
+Insert into `theirs.qml` at the exact lines this fork appends to. A conflict
+whose `||||||| base` section is empty means both sides only added lines, so
+resolving is a matter of picking an order. A conflict with content in the base
+section means something was edited, and that is the thing to avoid.
+
+## Upstream
+
+`upstream.lock` records the omarchy commit this fork tracks, and that commit is
+the common ancestor for every merge.
+
+```bash
+tools/sync-upstream --check    # what upstream has done, and what we have, touches nothing
+tools/sync-upstream --diff     # our changes against the pinned base, as a patch
+tools/sync-upstream            # merge it in
+```
+
+`--check` and `--diff` change nothing and can be combined.
+
+### Reading the fork's own diff before syncing
+
+`tools/sync-upstream --diff` is the answer to "what have we changed here?", as a
+patch rather than a line count. It diffs each tracked file against the pinned
+sha, so it is this fork's delta whatever upstream has done since: it reads the
+same when you are up to date, when upstream has moved, and before a merge has
+run. Output is `git diff`, so it pages on a terminal and is a valid patch when
+redirected:
+
+```bash
+tools/sync-upstream --diff > fork.patch
+git apply --check --reverse fork.patch   # confirm it is exactly the current delta
+```
+
+A file that matches the pinned base does not appear at all (`Model.js` in
+practice), which is the same signal `--check` gives as "identical to upstream".
+
+### The merge
+
+`sync-upstream` fetches `basecamp/omarchy` into a bare mirror under `$TMPDIR`
+(override with `OMARCHY_UPSTREAM_MIRROR` if you want to keep it), then runs
+`git merge-file --diff3` over `Panel.qml`, `Model.js` and `manifest.json`:
+
+- **current** - this fork's file
+- **base** - the file at the pinned sha
+- **other** - the file at the current upstream tip
+
+Changes that do not overlap combine on their own. Only genuinely conflicting
+hunks stop for a human, and the markers are labelled so it is obvious which side
+is which:
+
+```
+<<<<<<< ours (Panel.qml)
+  Button { text: root.modeLabel() }   // FORK: ours
+||||||| base (upstream c668141e)
+  Button { }
+=======
+  Button { text: root.heroStatusText }   // upstream
+>>>>>>> upstream (v4-0-4 c668141e)
+```
+
+The pin only advances when every file merged clean. Resolve a conflict, commit
+the resolution, then re-run: it merges again from the still-unpinned base, which
+by then matches your resolved file, so the second run comes back clean and
+re-pins.
+
+### Which upstream branch, and the ordering rule
+
+**It tracks the omarchy you have installed: the release branch, not omarchy's
+development branch.** That is the part worth understanding, because getting it
+wrong is invisible until the widget fails to appear.
+
+Every release has its own branch (`v4-0-1`, `v4-0-4`, ...), and they form a
+fast-forward chain, so after `omarchy update` the pin walks forward from one
+release to the next. `quattro` is omarchy's development branch and the repo's
+default; merging against it would import panel code that no released omarchy has
+yet.
+
+A cloned first-party panel is not self-contained. It imports types and singleton
+members that the shell provides, so panel code from a newer omarchy can
+reference API this machine does not have:
+
+| upstream commit | what `Panel.qml` gained | what happens on an older omarchy |
+| --- | --- | --- |
+| `c231097d` | `ShellIpc`, plus its `qmldir` entry | `ShellIpc is not a type`; the widget never loads and the bar slot is simply empty |
+| `b18ab495` | `Style.duration()`, `Style.reduceMotion` | `Style` exists, so these fail as missing members |
+
+Neither produces an error anyone sees. So the order is: **update omarchy first,
+then run `tools/sync-upstream`** to advance the pin. Until then, `--check`
+reporting drift is correct information rather than an action item, and
+`bin/check` fails if the panel ever outruns the shell again.
+
+`--check` also compares the lock's `branch=` against the omarchy installed on
+this machine and warns when they disagree, so that ordering rule is checked
+rather than only written down. It warns and carries on: a fork tracking an older
+omarchy is still a fork worth keeping in step.
+
+After merging, run `bin/check`. The `Model.js` stage will tell you if the merge
+touched something it should not have, and the shell API stages will tell you if
+the merge outran the omarchy you are running.
+
 ## Checks
 
 ```bash
@@ -11,7 +181,7 @@ need an Omarchy box. Any failing stage exits non-zero, and skipped stages are
 listed, so a partial run never reads as green.
 
 | Stage | Fails on |
-|---|---|
+| --- | --- |
 | `bash -n`, once per script | a shell script that does not parse |
 | `bin/check-agent-files` | an agent-instruction file anywhere in the tree |
 | `manifest.json` parse | invalid JSON |
@@ -60,6 +230,9 @@ upstream shell tree. The shell API stages can never run in CI, which has no
 Omarchy; they run for anyone who clones the repo on an Omarchy box. The `Style`
 stage runs anywhere `$SHELL_DIR` exists, so it runs with or without `qmllint`.
 
+`bin/check` guards the two ways this fork has broken before: `Model.js` drifting
+from upstream, and `Panel.qml` outrunning the shell API you are running.
+
 ## Tests
 
 ```bash
@@ -82,81 +255,47 @@ One gap, on purpose. The branch that reports a write the kernel refused needs a
 sysfs attribute that rejects a value, which a plain file cannot be, so that test
 asserts the check is present rather than pretending to exercise it.
 
-## Keeping `Panel.qml` mergeable
+## Keyboard navigation
 
-`Panel.qml` is upstream's. Everything this fork adds is an insertion, never an
-edit of a line upstream owns, and every block is marked:
+The panel's keyboard cursor is upstream's own: `cursorActive` plus a flat
+`profileIndex` into the profile buttons. We extend that rather than replace it,
+so ours is one more boolean in the same idiom, `conservationFocused`, meaning
+"the cursor is on our row instead of the profiles".
 
-```qml
-// ---------- Lenovo battery conservation ----------
-```
+- `h`/`l` and the left/right arrows move between profiles, unchanged.
+- `j`/`k` and up/down walk between the two rows, lighting exactly one row at a
+  time.
+- Return or Space activates whichever row the cursor is on.
+- Hovering a row moves the cursor there, so mouse and keyboard agree and only
+  one row is lit.
 
-Do not reformat, reorder or tidy anything you did not add. The merge is clean
-whenever the two sides do not share a line, so an insertion is free and an edit
-to a line upstream is changing costs a conflict every time.
+Two deliberate differences from a stock panel:
 
-The only edits inside code upstream owns are two methods appended to the existing
-`IpcHandler` block, and the panel key dispatcher's `onMoveRequested` and
-`onActivateRequested` handlers. If you add another, append it after those.
+- Upstream sends `j`/`k` into the profile list. Here they change rows, and only
+  `h`/`l` move between profiles.
+- Our row is skipped entirely while it cannot act - before `install.sh` has run,
+  or the mode has not been read - so the cursor cannot park on a toggle that
+  would refuse to flip. The cost is that the row's "run `sudo ./install.sh`"
+  message cannot be read with the keyboard alone.
 
-**Check a change stays mergeable rather than assuming it.** Three-way merge
-`Panel.qml` against a deliberately adversarial upstream:
+The row's title is bold because the shared `Toggle` component hardcodes
+`font.bold` on its label and offers no property to turn it off. Matching regular
+weight, as the network panel's list rows use, would mean replacing a shared
+component with a local one - and losing its tab focus and Return/Enter/Space
+handling with it. The title size is set to `Style.font.body` so at least the
+size matches the rows beside it.
 
-```bash
-sha=$(sed -n 's/^sha=//p' upstream.lock)
-git --git-dir=/tmp/omarchy-power-lenovo-battery-conservation-upstream.git \
-    show "$sha:shell/plugins/panels/power/Panel.qml" > /tmp/base.qml
-cp /tmp/base.qml /tmp/theirs.qml   # then add an upstream edit to theirs.qml
-git merge-file --diff3 -p Panel.qml /tmp/base.qml /tmp/theirs.qml > /tmp/merged.qml
-```
+The cursor stays where it was last put. Hovering a row leaves it lit after the
+mouse moves away, because that is upstream's behaviour: `cursorActive` is only
+ever cleared when the battery appears, so a profile button stays lit the same
+way. We match it rather than giving our row a second hover model.
 
-Insert into `theirs.qml` at the exact lines this fork appends to. A conflict
-whose `||||||| base` section is empty means both sides only added lines, so
-resolving is a matter of picking an order. A conflict with content in the base
-section means something was edited, and that is the thing to avoid.
-
-## Upstream
-
-```bash
-tools/sync-upstream --check   # what upstream has done, and what we have
-tools/sync-upstream --diff    # our changes against the pinned base, as a patch
-tools/sync-upstream           # merge it in
-```
-
-**Reading the fork's own diff before syncing.** `tools/sync-upstream --diff` is
-the answer to "what have we changed here?", as a patch rather than a line count.
-It diffs each tracked file against the pinned sha, so it is this fork's delta
-whatever upstream has done since: it reads the same when you are up to date, when
-upstream has moved, and before a merge has run. Output is `git diff`, so it pages
-on a terminal and is a valid patch when redirected:
-
-```bash
-tools/sync-upstream --diff > fork.patch
-git apply --check --reverse fork.patch   # confirm it is exactly the current delta
-```
-
-A file that matches the pinned base does not appear at all (`Model.js` in
-practice), which is the same signal `--check` gives as "identical to upstream".
-
-**`upstream.lock` tracks the release branch for the omarchy that is installed,
-not omarchy's development branch.** The panel is not self-contained: it uses
-types and `Style` members the shell provides, so a merge that outruns the shell
-breaks the widget in a way that does not announce itself.
-
-`quattro` is omarchy's default branch and rolls forward continuously, so merging
-against it imports panel code that no released omarchy has yet. `ShellIpc` and
-`Style.duration()` are both on `quattro` today and on neither the installed
-release nor the locked one. Use the release branch, `v4-0-4` for omarchy 4.0.4.
-
-The order is therefore: update omarchy first, then merge. While omarchy is
-behind, `--check` will keep reporting drift and that is expected. It also warns
-when `branch=` and the installed omarchy disagree, so you find out which of the
-two you are behind on rather than guessing. `bin/check` is what stops a merge
-that would go too far.
-
-After merging, run `bin/check`. The `Model.js` stage will tell you if the merge
-touched something it should not have, and the shell API stages will tell you if
-the merge outran the omarchy you are running.
+This is the one place where adding a feature meant changing upstream's code
+rather than only adding to it: the key dispatcher's `onMoveRequested` and
+`onActivateRequested`. Both now call one function of ours, and upstream's
+`selectProfileByDelta`, `activateSelectedProfile` and `setProfile` are untouched
+behind them. The rules in [Keeping `Panel.qml` mergeable](#keeping-panelqml-mergeable)
+apply to those two handlers from now on.
 
 ## Security
 
