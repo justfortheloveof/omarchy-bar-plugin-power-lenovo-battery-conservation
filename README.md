@@ -271,8 +271,20 @@ omarchy is still a fork worth keeping in step.
 
 ```bash
 tools/sync-upstream --check    # what upstream has done, and what we have, touches nothing
+tools/sync-upstream --diff     # our changes against the pinned base, as a patch
 tools/sync-upstream            # merge it in
 ```
+
+`--diff` answers "what has this fork actually changed?" with the patch rather
+than a line count, by diffing each tracked file against the pinned sha. It is
+`git diff`, so it pages and colours on a terminal and writes a clean patch when
+redirected:
+
+```bash
+tools/sync-upstream --diff > fork.patch   # reviewable, or git-applyable
+```
+
+`--check` and `--diff` change nothing and can be combined.
 
 `sync-upstream` fetches `basecamp/omarchy` into a bare mirror under `$TMPDIR`
 (override with `OMARCHY_UPSTREAM_MIRROR` if you want to keep it), then runs

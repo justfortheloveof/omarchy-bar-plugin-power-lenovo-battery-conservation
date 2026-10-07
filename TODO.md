@@ -1,5 +1,4 @@
 # TODO
 
-- clean up code and comments
-
+- clean up code
 - read and fixup readme

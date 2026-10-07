@@ -21,6 +21,7 @@ listed, so a partial run never reads as green.
 | `Style` members | `Panel.qml` using a `Style` member the installed omarchy lacks |
 | `omarchy plugin validate` | manifest schema |
 | `tools/sync-upstream --check` | never; reports where this fork sits |
+| `tools/sync-upstream --diff` | never; prints this fork's changes as a patch |
 
 Four of those deserve a note.
 
@@ -118,8 +119,24 @@ section means something was edited, and that is the thing to avoid.
 
 ```bash
 tools/sync-upstream --check   # what upstream has done, and what we have
+tools/sync-upstream --diff    # our changes against the pinned base, as a patch
 tools/sync-upstream           # merge it in
 ```
+
+**Reading the fork's own diff before syncing.** `tools/sync-upstream --diff` is
+the answer to "what have we changed here?", as a patch rather than a line count.
+It diffs each tracked file against the pinned sha, so it is this fork's delta
+whatever upstream has done since: it reads the same when you are up to date, when
+upstream has moved, and before a merge has run. Output is `git diff`, so it pages
+on a terminal and is a valid patch when redirected:
+
+```bash
+tools/sync-upstream --diff > fork.patch
+git apply --check --reverse fork.patch   # confirm it is exactly the current delta
+```
+
+A file that matches the pinned base does not appear at all (`Model.js` in
+practice), which is the same signal `--check` gives as "identical to upstream".
 
 **`upstream.lock` tracks the release branch for the omarchy that is installed,
 not omarchy's development branch.** The panel is not self-contained: it uses

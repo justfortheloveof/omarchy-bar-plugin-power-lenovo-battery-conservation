@@ -19,7 +19,10 @@
 # combine on their own; only real conflicts stop for you. Development-time only,
 # the installed plugin never runs this.
 #
-# Usage: tools/sync-upstream [--check]
+# --check says where each tracked file stands and changes nothing. --diff prints
+# this fork's changes as a patch against the pinned base. Both can be combined.
+#
+# Usage: tools/sync-upstream [--check] [--diff]
 
 set -euo pipefail
 
@@ -170,6 +173,41 @@ report() {
 	done
 }
 
+# --diff: what this fork has changed, as a patch against the pinned base. The
+# base is the point, not the tip: ours-minus-the-base is by definition this
+# fork's own changes, and it stays meaningful when upstream has moved on, when
+# it has not, and before any merge has run.
+#
+# Handed to git rather than diff(1) so paging and colour are git's problem: it
+# pages and colours only when stdout is a terminal, so a redirected run yields a
+# clean patch. One recursive diff over two populated directories rather than one
+# per file, so a file that matches the base (Model.js, in practice) simply does
+# not appear.
+show_ours() {
+	local base=upstream-${BASE_SHA:0:7} ours=ours name
+
+	mkdir -p "$WORK/$base" "$WORK/$ours"
+	for name in "${TRACKED[@]}"; do
+		upstream_file "$BASE_SHA" "$name" >"$WORK/$base/$name"
+		cp "$name" "$WORK/$ours/$name"
+	done
+
+	# Run from inside $WORK and name the directories relatively, because git
+	# prints the path it was given: an absolute one would put the mktemp path in
+	# every header. Empty prefixes drop the a/ b/ that would otherwise sit in
+	# front of those, leaving `upstream-<sha>/Panel.qml` and `ours/Panel.qml`.
+	# A subshell, so this does not move the repository out from under main().
+	# --no-index is implied by git outside a work tree but required inside one,
+	# which is where this runs.
+	#
+	# git exits 1 when there are differences, which is this mode's normal case
+	# and not a failure.
+	(
+		cd "$WORK"
+		git diff --no-index --src-prefix= --dst-prefix= "$base" "$ours" || true
+	)
+}
+
 # merge: fold upstream into each tracked file. Records any file that conflicted
 # in CONFLICTS so the caller can refuse to advance the pin.
 merge() {
@@ -218,11 +256,12 @@ show_delta() {
 # ---------------------------------------------------------------------------
 
 main() {
-	local check_only=0 arg stuck name
+	local check_only=0 diff_only=0 arg stuck name
 
 	for arg in "$@"; do
 		case "$arg" in
 		--check) check_only=1 ;;
+		--diff) diff_only=1 ;;
 		-h | --help)
 		# Print this file's header comment, so the usage text cannot drift out of
 		# sync with the code implementing it. Stops at the first line after the
@@ -231,7 +270,7 @@ main() {
 			return 0
 			;;
 		*)
-			die "unknown option '$arg' (try --check)"
+			die "unknown option '$arg' (try --check or --diff)"
 			;;
 		esac
 	done
@@ -264,10 +303,15 @@ main() {
 	if [[ $BASE_SHA == "$TIP_SHA" ]]; then
 		note "Already up to date with $UPSTREAM_BRANCH."
 		# Still worth reporting: "what has this fork changed?" is the question
-		# --check exists to answer, and there is nothing new to merge here.
+		# --check and --diff exist to answer, and there is nothing new to merge
+		# here.
 		if ((check_only)); then
 			note ""
 			report
+		fi
+		if ((diff_only)); then
+			note ""
+			show_ours
 		fi
 		return 0
 	fi
@@ -280,8 +324,16 @@ main() {
 	upstream_git diff --stat "$BASE_SHA" "$TIP_SHA" -- "$UPSTREAM_PATH"
 	note ""
 
-	if ((check_only)); then
-		report
+	if ((check_only || diff_only)); then
+		if ((check_only)); then
+			report
+		fi
+		if ((diff_only)); then
+			if ((check_only)); then
+				note ""
+			fi
+			show_ours
+		fi
 		return 0
 	fi
 
